@@ -32,7 +32,7 @@
 #define TRAJECTORY_CONVERTER_H
 
 #define PARAM_NAME_INPUT_TRAJ_TOPIC     "input_trajectory_topic"
-#define PARAM_DEFAULT_INPUT_TRAJ_TOPIC  "/gmm/traj_input"
+#define PARAM_DEFAULT_INPUT_TRAJ_TOPIC  "/gmm/traj_input" //"GMM/posesArray"
 
 #define PARAM_NAME_OUTPUT_DATA_TOPIC    "output_data_topic"
 #define PARAM_DEFAULT_OUTPUT_DATA_TOPIC "/gmm/data"

@@ -1,0 +1,44 @@
+1) See if the messages need to be fed to the gaussian node in order
+   rearrange the demonstration points
+
+2) See the order of the dataset as there is one data shifted in each demonstration
+
+"learned-traj-peginhole-D1-3gaus.bag":
+-this one works good with good Peg insertion
+-3 Demonstrations
+
+
+TOTRY: before implementing DTW
+- increase no. of gaussians (it didn't make a diff in D5)
+- increase no. of steps in MoveTrajectory func (it didn't make a diff in D5)
+- increase the stiffness (it made a diff in D1; since the robot is learned on positions; it is better to increase the stiffness of positions and decrease of orientations)
+- increase the linear velocity (it didn't make a diff in D5)
+- make sure the end-effector orientation is vertical
+- restarting the robot (didn't make a diff in D1)
+- keeping all demons almost similar
+
+
+TODO:
+- create a separate node for DTW and publish the modified demons on gmm/data  $ DONE $
+
+
+NOTE:
+-- Added the 0.01 in position.z, stiffness = (3500, 3500, 3500, 300, 300, 300):
+- learned-traj-peginhole-D8-3gauss works perfect.
+- learned-traj-peginhole-D8-3gauss works perfect.
+- learned-traj-peginhole-D8-4gauss works only when the peg is strictly aligned with the Hole. (even when I set the stiffness to max -> (5000, 5000, 5000, 300, 300, 300))
+
+TOTRY: after implementing DTW
+- take the shortest demons instead of the longest one as the reference demon.
+- increase the number of demons.
+- filter out the different demons together and keep the similar one (according to dtw_distance)
+
+
+LfD data collection description:
+- no. of gaussians
+- cartesian velocity - Impedance (stiffness, damping)
+
+TODO: ONLINE Learning
+- create the rosbag for recording the trials in IiwaRobot::Demonstration [DONE]
+- start the DATA_ACQ node after the FINISH_COMMAND_IIWA if there is a new demons file added from last trial.
+- Inside DATA_ACQ node, there should be a function to append the newly added demons to the big D.bag demons file.

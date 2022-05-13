@@ -30,6 +30,7 @@
 
 #include <gaussian_mixture_model/gmm.h>
 #include <cmath>
+#include <iostream>
 
 #define EPSILON (1e-5)
 #define MAXITER 200
@@ -51,7 +52,7 @@ GMMExpectationMaximization::Real GMMExpectationMaximization::gauss(const VectorX
   // check that the covariance matrix is invertible
   if (std::abs(det) < std::pow(m_epsilon,dim) * 0.1)
     return 0.0; // the gaussian has approximately zero width: the probability of any point falling into it is approximately 0.
- 
+
   // else, compute pdf
   MatrixX inverse_cov = cov.inverse();
   VectorX dist = pt - mean;
@@ -68,7 +69,7 @@ GMMExpectationMaximization::uint GMMExpectationMaximization::execute(uint num_ga
 }
 
 GMMExpectationMaximization::uint GMMExpectationMaximization::execute(const MatrixX & dataset)
-{  
+{
   const uint data_count = dataset.rows();
   const uint num_gaussians = m_means.size();
   const uint dim = dataset.cols();
@@ -82,7 +83,7 @@ GMMExpectationMaximization::uint GMMExpectationMaximization::execute(const Matri
   VectorX dif(dim);
 
   Real prev_log_likelyhood = 1.0;
-  
+
   uint it_num;
   for (it_num = 0; it_num < m_max_iterations; it_num++)
   {
@@ -102,7 +103,7 @@ GMMExpectationMaximization::uint GMMExpectationMaximization::execute(const Matri
 
     for (uint d = 0; d < data_count; d++)
       pix.row(d) = (pxi.row(d).transpose().array() * weights.array()).transpose() / pxidatatot[d];
-    
+
     ex = pix.colwise().sum();
 
     for(uint g = 0; g < num_gaussians; g++)
@@ -157,7 +158,7 @@ bool GMMExpectationMaximization::autoInitializeByEqualIntervals(uint num_gaussia
   }
   Real cspan = cmax - cmin;
 
-  for(uint n = 0; n < data_count; n++) 
+  for(uint n = 0; n < data_count; n++)
   {
     // compute gaussian index to which this point belongs
     uint gi = uint((dataset(n,col) - cmin) / (cspan + 1.0) * Real(num_gaussians));
@@ -184,7 +185,7 @@ bool GMMExpectationMaximization::autoInitializeByEqualIntervals(uint num_gaussia
     m_means[g] /= Real(popsize);
     // same weight for all gaussians
     m_weights[g] = 1.0f / Real(num_gaussians);
-     
+
     // compute covariance matrix
     for (uint p = 0; p < popsize; p++)
     {
@@ -218,9 +219,10 @@ GMMExpectationMaximization::Real GMMExpectationMaximization::getBIC(const Matrix
 
   uint data_count = dataset.rows();
   Real sum = 0.0;
-  
-  for(uint i = 0; i < data_count; i++)
-    sum += std::log(expectation(dataset.row(i).transpose()));
 
+  for(uint i = 0; i < data_count; i++)
+  {
+    sum += std::log(expectation(dataset.row(i).transpose()));
+  }
   return -sum + m_bic_params_weight * (number_of_parameters / 2.0) * std::log(Real(data_count));
 }
