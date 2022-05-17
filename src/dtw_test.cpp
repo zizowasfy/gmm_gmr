@@ -51,8 +51,13 @@
 
 #include <iostream>
 #include <fstream>
-
+#include <ros/ros.h>
+#include <rosbag/bag.h>
 #include <onlineL_Params.hpp>
+#include <my_iiwa_pkg/Numoftrial.h>
+
+#include <sys/stat.h>
+// #include <sys/types.h>
 
 inline bool file_exists (const std::string& name)
 {
@@ -68,12 +73,41 @@ inline void file_copy (const std::string str1, const std::string str2)
   dst << src.rdbuf();
 }
 
-int main()
+
+int main(int argc, char **argv)
 {
   // std::ifstream  src(std::string(DIR_LEARNEDTRAJ)+"learned-traj-peginhole-D8-2gauss.bag", std::ios::binary);
   // std::ofstream  dst(std::string(DIR_LEARNEDTRAJ)+"learned-traj_COPY.bag", std::ios::binary);
   // dst << src.rdbuf();
-  file_copy(std::string(DIR_LEARNEDTRAJ)+"learned-traj-peginhole-D8-2gauss.bag", std::string(DIR_LEARNEDTRAJ)+"learned-traj_COPY.bag");
+  //   file_copy(std::string(DIR_LEARNEDTRAJ)+"learned-traj-peginhole-D8-2gauss.bag", std::string(DIR_LEARNEDTRAJ)+"learned-traj_COPY.bag");
+  //
+  //   std::cout << file_exists(std::string(DIR_LEARNEDTRAJ)+"learned-traj-peginhole-D8-2gauss.bag") << std::endl;
+  // bool ay;
+  // std::cin >> ay;
+  // std::cout << ay << std::endl;
+  ////
+  // char* char_arr;
+  // std::string dir(std::string(CREATE_DIR_DATA));
+  // char_arr = &dir[0];
+  //
+  // mkdir(char_arr, 0777);
+  ////
+  // rosbag::Bag wbag;
+  // wbag.open(std::string(DIR_NEW_DEMONS)+"newDemonss"+"/test.bag", rosbag::bagmode::Write);
+  // wbag.close();
+  ////
+  ros::init(argc, argv,"ros_test_node");
+  ros::NodeHandle nh;
+  ros::ServiceClient numofTrial_client = nh.serviceClient<my_iiwa_pkg::Numoftrial>("/numofTrial");
 
-  std::cout << file_exists(std::string(DIR_LEARNEDTRAJ)+"learned-traj-peginhole-D8-2gauss.bag") << std::endl;
+  my_iiwa_pkg::Numoftrial srv;
+  numofTrial_client.call(srv);
+  if (numofTrial_client.call(srv))
+  {
+    ROS_INFO("Sum: %ld", (long int)srv.response.numofTrial);
+  }
+  else
+  {
+    ROS_ERROR("Failed to call service add_two_ints");
+  }
 }

@@ -85,6 +85,7 @@ target_link_libraries(gaussian_mixture_model_trajectory_converter
 
 ## Added by zizowasfy
 add_executable(dtw_test src/dtw_test.cpp)
+target_link_libraries(dtw_test ${catkin_LIBRARIES})
 
 add_executable(Data_Acq src/data_acq.cpp)
 target_link_libraries(Data_Acq ${catkin_LIBRARIES})

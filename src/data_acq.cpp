@@ -22,7 +22,7 @@
 #include <DTW.hpp>
 
 #include <onlineL_Params.hpp>
-
+#include <my_iiwa_pkg/Numoftrial.h>
 // using namespace std;
 
 class Data_Acq
@@ -33,9 +33,9 @@ class Data_Acq
     geometry_msgs::PoseArray posesArray;
     geometry_msgs::Pose pose;
     geometry_msgs::PoseStamped demonPoses;
+    ros::ServiceClient numofTrial_client;
 
     int newseq = 0;
-    uint newDemons_count = 0;
     // std::list<int> npoints;
     std_msgs::Int32MultiArray DemosSamples;
     std_msgs::Int32 max, min;
@@ -49,46 +49,53 @@ class Data_Acq
   {
     numTrajsamples_pub = n.advertise<std_msgs::Int32MultiArray>("/GMM/numberofSamplesinDemos", 1);
     onlineLearning_sub = n.subscribe("/onlineLearning/Stage/", 1, &Data_Acq::newData, this);
+    numofTrial_client = n.serviceClient<my_iiwa_pkg::Numoftrial>("/numofTrial");
   }
 
-  void append_bags(rosbag::Bag * from, rosbag::Bag * to)
+  void append_bags(rosbag::Bag & from, rosbag::Bag & to)
   {
     std::vector<std::string> topics;
     topics.push_back(std::string("/Demonstration/CartesianPose"));
 
-    rosbag::View view(*from, rosbag::TopicQuery(topics));
+    rosbag::View view(from, rosbag::TopicQuery(topics));
 
     foreach(rosbag::MessageInstance const m, view)
     {
       geometry_msgs::PoseStamped::ConstPtr s = m.instantiate<geometry_msgs::PoseStamped>();
       if (s != NULL)
-        to->write("/Demonstration/demonsPoses", ros::Time::now(), *s);
-        ros::Duration(0.001).sleep();
+        to.write("/Demonstration/CartesianPose", ros::Time::now(), *s);
+        // ros::Duration(0.001).sleep();
     }
 
-    from->close();
-    to->close();
+    from.close();
+    to.close();
   }
 
-  void newData(const std_msgs::Int32 & onLstage)
+  void newData(const std_msgs::Int32 & onLstage) // NOTE: const is important here
   {
     if (onLstage.data == START_DATA_ACQ)
     {
-      newDemons_count++;
-      // ________________________________________ //
+      my_iiwa_pkg::Numoftrial srv;
+      if (numofTrial_client.call(srv)) { ROS_INFO("numofTrial: %ld", (long int)srv.response.numofTrial); }
+      else { ROS_ERROR("Failed to call service numofTrial"); }
+
+            // ________________________________________ //
       rosbag::Bag rbag, wbag, newDbag, allDbag;
       uint numD = 1;
       newDbag.open(std::string(DIR_NEW_DEMONS)+"newDemons.bag", rosbag::bagmode::Read);
 
       allDbag.open(std::string(DIR_ALL_DEMONS)+"allDemons.bag", rosbag::bagmode::Append);
 
-      append_bags(&newDbag, &allDbag);
+      std::cout << " " << std::endl;
+
+      append_bags(newDbag, allDbag);
 
       rbag.open(std::string(DIR_ALL_DEMONS)+"allDemons.bag", rosbag::bagmode::Read);
       std::vector<std::string> topics;
       topics.push_back(std::string("/Demonstration/CartesianPose"));
 
       rosbag::View view(rbag, rosbag::TopicQuery(topics));
+      int i = 0 ;
       foreach(rosbag::MessageInstance const m, view)
       {
           geometry_msgs::PoseStamped::ConstPtr s = m.instantiate<geometry_msgs::PoseStamped>();
@@ -96,14 +103,15 @@ class Data_Acq
           if (s != NULL)
               if (s->header.frame_id == "NEW_DEMON")
               {
-                newseq = s->header.seq;
+                newseq = 1;// newseq = s->header.seq;
+                // If there is more than one demonstration in a trial, it saves each one of them in a separate bag file under /newDemons(newDemons_count) folder
                 wbag.close();
-                wbag.open(std::string(DIR_NEW_DEMONS)+"/newDemons"+std::to_string(newDemons_count)+"newDemons"+std::to_string(newDemons_count)+"_"+std::to_string(numD)+".bag", rosbag::bagmode::Write);
+                wbag.open(std::string(DIR_NEW_DEMONS)+"newDemons"+std::to_string((long int)srv.response.numofTrial)+"_"+std::to_string(numD)+".bag", rosbag::bagmode::Write);
               }
               else if (s->header.frame_id == "DEMON_END")
               {
                 // npoints.push_back(s->header.seq - newseq);
-                DemosSamples.data.push_back(s->header.seq - newseq + 1); // + 1 VERY IMPORTANT to add to avoid misarrangement of samples of Demonstrations
+                DemosSamples.data.push_back(newseq); //DemosSamples.data.push_back(s->header.seq - newseq + 1); // + 1 VERY IMPORTANT to add to avoid misarrangement of samples of Demonstrations
                 numD++;
               }
               // pose = s->pose;
@@ -118,9 +126,13 @@ class Data_Acq
               demonPoses.pose.position.y = s->pose.position.y;
               demonPoses.pose.position.z = s->pose.position.z;
 
-              wbag.write("/Demonstration/demonsPoses", ros::Time::now(), demonPoses);
+              wbag.write("/Demonstration/CartesianPose/demonsPoses", ros::Time::now(), demonPoses);
               ros::Duration(0.001).sleep();
+              i++;
+              newseq++;
       }
+
+      std::cout << i << std::endl;
       rbag.close();
 
       std::cout << "Number of Demonstrations: "<< DemosSamples.data.size() << std::endl;
