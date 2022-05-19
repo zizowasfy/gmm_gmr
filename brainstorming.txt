@@ -42,3 +42,9 @@ TODO: ONLINE Learning
 - create the rosbag for recording the trials in IiwaRobot::Demonstration [DONE]
 - start the DATA_ACQ node after the FINISH_COMMAND_IIWA if there is a new demons file added from last trial.
 - Inside DATA_ACQ node, there should be a function to append the newly added demons to the big D.bag demons file.
+
+ERROR "One or more robots are not in the planned path" in the teach pendant
+TOTRY:
+- change the threads in the AsyncSpinner
+- make sure the haptic device is calibrated each trial
+- 

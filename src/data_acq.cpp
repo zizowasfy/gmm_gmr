@@ -23,6 +23,8 @@
 
 #include <onlineL_Params.hpp>
 #include <my_iiwa_pkg/Numoftrial.h>
+#include <my_iiwa_pkg/Numoftrialarr.h>
+
 // using namespace std;
 
 class Data_Acq
@@ -34,8 +36,9 @@ class Data_Acq
     geometry_msgs::Pose pose;
     geometry_msgs::PoseStamped demonPoses;
     ros::ServiceClient numofTrial_client;
-
+    ros::ServiceClient numofTrialArr_client;
     int newseq = 0;
+    int numT = 0;
     // std::list<int> npoints;
     std_msgs::Int32MultiArray DemosSamples;
     std_msgs::Int32 max, min;
@@ -50,6 +53,7 @@ class Data_Acq
     numTrajsamples_pub = n.advertise<std_msgs::Int32MultiArray>("/GMM/numberofSamplesinDemos", 1);
     onlineLearning_sub = n.subscribe("/onlineLearning/Stage/", 1, &Data_Acq::newData, this);
     numofTrial_client = n.serviceClient<my_iiwa_pkg::Numoftrial>("/numofTrial");
+    numofTrialArr_client = n.serviceClient<my_iiwa_pkg::Numoftrialarr>("/numofTrialArr");
   }
 
   void append_bags(rosbag::Bag & from, rosbag::Bag & to)
@@ -75,22 +79,29 @@ class Data_Acq
   {
     if (onLstage.data == START_DATA_ACQ)
     {
+      // _________ Calling the Services _________ //
       my_iiwa_pkg::Numoftrial srv;
       if (numofTrial_client.call(srv)) { ROS_INFO("numofTrial: %ld", (long int)srv.response.numofTrial); }
       else { ROS_ERROR("Failed to call service numofTrial"); }
 
-            // ________________________________________ //
-      rosbag::Bag rbag, wbag, newDbag, allDbag;
-      uint numD = 1;
-      newDbag.open(std::string(DIR_NEW_DEMONS)+"newDemons.bag", rosbag::bagmode::Read);
+      my_iiwa_pkg::Numoftrialarr srvarr;
+      if (numofTrialArr_client.call(srvarr))
+      { std::cout << "{ " ; for (int i : srvarr.response.numofTrialArr) { std::cout << i << " ," ; } std::cout << " }" << std::endl; }
+      else { ROS_ERROR("Failed to call service numofTrialArr"); }
+      // \_________ Calling the Services _________ //
 
-      allDbag.open(std::string(DIR_ALL_DEMONS)+"allDemons.bag", rosbag::bagmode::Append);
+            // ________________________________________ //
+      rosbag::Bag rbag, wbag, newTbag, trainbag;
+      // uint numD = 1;
+      newTbag.open(std::string(DIR_TRIALS)+"Trial.bag", rosbag::bagmode::Read);
+
+      trainbag.open(std::string(DIR_TRAINING_DEMONS)+"trainingDemons.bag", rosbag::bagmode::Append);
 
       std::cout << " " << std::endl;
 
-      append_bags(newDbag, allDbag);
+      append_bags(newTbag, trainbag);
 
-      rbag.open(std::string(DIR_ALL_DEMONS)+"allDemons.bag", rosbag::bagmode::Read);
+      rbag.open(std::string(DIR_TRAINING_DEMONS)+"trainingDemons.bag", rosbag::bagmode::Read);
       std::vector<std::string> topics;
       topics.push_back(std::string("/Demonstration/CartesianPose"));
 
@@ -106,13 +117,14 @@ class Data_Acq
                 newseq = 1;// newseq = s->header.seq;
                 // If there is more than one demonstration in a trial, it saves each one of them in a separate bag file under /newDemons(newDemons_count) folder
                 wbag.close();
-                wbag.open(std::string(DIR_NEW_DEMONS)+"newDemons"+std::to_string((long int)srv.response.numofTrial)+"_"+std::to_string(numD)+".bag", rosbag::bagmode::Write);
+                wbag.open(std::string(DIR_DEMONS)+"Trial"+"_"+std::to_string(srvarr.response.numofTrialArr[numT])+"_demon.bag", rosbag::bagmode::Write);
               }
               else if (s->header.frame_id == "DEMON_END")
               {
                 // npoints.push_back(s->header.seq - newseq);
                 DemosSamples.data.push_back(newseq); //DemosSamples.data.push_back(s->header.seq - newseq + 1); // + 1 VERY IMPORTANT to add to avoid misarrangement of samples of Demonstrations
-                numD++;
+                // numD++;
+                numT++;
               }
               // pose = s->pose;
               // posesArray.header.frame_id = "iiwa_link_0";

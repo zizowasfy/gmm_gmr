@@ -14,6 +14,8 @@
 #include <DTW.hpp>
 
 #include <onlineL_Params.hpp>
+#include <my_iiwa_pkg/Numoftrial.h>
+#include <my_iiwa_pkg/Numoftrialarr.h>
 
 #include <sstream>
 #include <iostream>
@@ -24,6 +26,8 @@ private:
   std_msgs::Int32MultiArray numTrajsamples;
   ros::Subscriber numTrajsamples_sub;
   ros::Publisher posesArray_pub;
+  ros::ServiceClient numofTrialArr_client;
+
   uint newDemons_count = 0;
 
 
@@ -55,12 +59,19 @@ public:
   {
     numTrajsamples_sub = n.subscribe("/GMM/numberofSamplesinDemos", 1, &Demons_DTW::newData, this);
     posesArray_pub = n.advertise<geometry_msgs::PoseArray>("/gmm/traj_input", 1000);
+    numofTrialArr_client = n.serviceClient<my_iiwa_pkg::Numoftrialarr>("/numofTrialArr");
   }
 
   void newData(std_msgs::Int32MultiArray msg)
   {
+    my_iiwa_pkg::Numoftrialarr srvarr;
+    if (numofTrialArr_client.call(srvarr))
+    { std::cout << "{ " ; for (int i : srvarr.response.numofTrialArr) { std::cout << i << " ," ; } std::cout << " }" << std::endl; }
+    else { ROS_ERROR("Failed to call service numofTrialArr"); }
+
     newDemons_count++;
     numTrajsamples = msg;
+
     // _________ Reading Demonstrations data from demons bag files _________ //
 
     int maxindex = numTrajsamples.layout.data_offset;
@@ -75,10 +86,10 @@ public:
     for (int D = 0; D < numTrajsamples.data.size(); D++)
     {
       rosbag::Bag bag;
-      bag.open(std::string(DIR_NEW_DEMONS)+"/newDemons"+std::to_string(newDemons_count)+"newDemons"+std::to_string(newDemons_count)+"_"+std::to_string(D+1)+".bag", rosbag::bagmode::Read);
+      bag.open(std::string(DIR_DEMONS)+"Trial"+"_"+std::to_string(srvarr.response.numofTrialArr[D])+"_demon.bag", rosbag::bagmode::Read);
 
       std::vector<std::string> topics;
-      topics.push_back(std::string("/Demonstration/demonsPoses"));
+      topics.push_back(std::string("/Demonstration/CartesianPose/demonsPoses"));
 
       rosbag::View view(bag, rosbag::TopicQuery(topics));
       foreach(rosbag::MessageInstance const m, view)
@@ -194,7 +205,7 @@ public:
 
     for (int D = 0; D < numTrajsamples.data.size(); D++)    // numTrajsamples.data.size() must be equal to path_X.size() = no. of Demonstrations
     {
-      wbag.open(std::string(DIR_DTW_DEMONS)+"/newDemonsDTW"+std::to_string(newDemons_count)+"newDemonsDTW"+std::to_string(newDemons_count)+"_"+std::to_string(D+1)+".bag", rosbag::bagmode::Write);
+      wbag.open(std::string(DIR_DEMONS)+"Trial"+"_"+std::to_string(srvarr.response.numofTrialArr[D])+"_demon_DTW.bag", rosbag::bagmode::Write);
 
       for (int p = 0; p < demons_Z[maxindex].size(); p++)
       {
@@ -212,7 +223,7 @@ public:
         demonPoses.pose.position.z = demons_Z[D][path_Z[D][p][1]][0];
         demonPoses.pose.orientation.y = p;
         // std::cout << p << '\n';
-        wbag.write("/Demonstration/demonsPoses", ros::Time::now(), demonPoses);
+        wbag.write("/Demonstration/CartesianPose/demonsPoses", ros::Time::now(), demonPoses);
         ros::Duration(0.001).sleep();
       }
       wbag.close();
