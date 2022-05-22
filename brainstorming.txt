@@ -47,4 +47,4 @@ ERROR "One or more robots are not in the planned path" in the teach pendant
 TOTRY:
 - change the threads in the AsyncSpinner
 - make sure the haptic device is calibrated each trial
-- 
+- Try another router

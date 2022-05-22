@@ -68,7 +68,7 @@ class GMMNode
 
   GMMNode(ros::NodeHandle & nh): m_nh(nh), m_shutting_down_thread(&GMMNode::shutdownWaitingThread,this)
   {
-    indexofLearnedTraj.data = 0;
+    // indexofLearnedTraj.data = 0;
     int temp_int;
     std::string temp_string;
     double temp_double;
@@ -246,9 +246,13 @@ class GMMNode
 
   void onData(std_msgs::Float32MultiArrayConstPtr data)
   {
+    minnumofDemons++;
     boost::mutex::scoped_lock lock(m_queue_mutex);
-    m_queue.push_back(data);
-    m_queue_cond.notify_one();
+    if (minnumofDemons > 2)
+    {
+      m_queue.push_back(data);
+      m_queue_cond.notify_one();
+    }
   }
 
   void shutdownWaitingThread()
@@ -285,6 +289,8 @@ class GMMNode
   ros::Subscriber numTrajsamples_sub;
 
   int numTrajsamples;
+
+  int minnumofDemons = 0;
 
   std_msgs::Int32 indexofLearnedTraj;
 
@@ -414,14 +420,14 @@ class GMMNode
         indexofLearnedTraj.data++;
         // indexofLearnedTraj_pub.publish(indexofLearnedTraj);
         // Save the learned_trajectory in a bag file
-        wbag.open(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory"+std::to_string(indexofLearnedTraj.data)+".bag", rosbag::bagmode::Write);
+        wbag.open(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory_"+std::to_string(indexofLearnedTraj.data)+".bag", rosbag::bagmode::Write);
         ros::Duration(0.001).sleep();
         wbag.write("/gmm_node/gmm/learned_trajectory", ros::Time::now(), learned_posesArray);  // save the learned_trajectory in a bag file
         ros::Duration(0.001).sleep();
         wbag.close();
         // \Save the learned_trajectory in a bag file
         // Make a copy of this bag file
-        std::ifstream  src(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory-traj"+std::to_string(indexofLearnedTraj.data)+".bag", std::ios::binary);
+        std::ifstream  src(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory_"+std::to_string(indexofLearnedTraj.data)+".bag", std::ios::binary);
         std::ofstream  dst(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory.bag", std::ios::binary);
         dst << src.rdbuf();
         // \Make a copy of this bag file

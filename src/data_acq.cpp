@@ -37,8 +37,11 @@ class Data_Acq
     geometry_msgs::PoseStamped demonPoses;
     ros::ServiceClient numofTrial_client;
     ros::ServiceClient numofTrialArr_client;
+    // std::vector<int> numofTrialArr;
     int newseq = 0;
-    int numT = 0;
+    // int numT = 0;
+    // my_iiwa_pkg::Numoftrial srv;
+
     // std::list<int> npoints;
     std_msgs::Int32MultiArray DemosSamples;
     std_msgs::Int32 max, min;
@@ -88,6 +91,9 @@ class Data_Acq
       if (numofTrialArr_client.call(srvarr))
       { std::cout << "{ " ; for (int i : srvarr.response.numofTrialArr) { std::cout << i << " ," ; } std::cout << " }" << std::endl; }
       else { ROS_ERROR("Failed to call service numofTrialArr"); }
+      // numofTrialArr = srvarr.response.numofTrialArr;
+
+      ros::Duration(1).sleep();
       // \_________ Calling the Services _________ //
 
             // ________________________________________ //
@@ -106,7 +112,7 @@ class Data_Acq
       topics.push_back(std::string("/Demonstration/CartesianPose"));
 
       rosbag::View view(rbag, rosbag::TopicQuery(topics));
-      int i = 0 ;
+      int i = 0 ; int numT = 0;
       foreach(rosbag::MessageInstance const m, view)
       {
           geometry_msgs::PoseStamped::ConstPtr s = m.instantiate<geometry_msgs::PoseStamped>();
@@ -117,6 +123,8 @@ class Data_Acq
                 newseq = 1;// newseq = s->header.seq;
                 // If there is more than one demonstration in a trial, it saves each one of them in a separate bag file under /newDemons(newDemons_count) folder
                 wbag.close();
+                std::cout << srvarr.response.numofTrialArr[numT] << std::endl;
+
                 wbag.open(std::string(DIR_DEMONS)+"Trial"+"_"+std::to_string(srvarr.response.numofTrialArr[numT])+"_demon.bag", rosbag::bagmode::Write);
               }
               else if (s->header.frame_id == "DEMON_END")
@@ -125,6 +133,7 @@ class Data_Acq
                 DemosSamples.data.push_back(newseq); //DemosSamples.data.push_back(s->header.seq - newseq + 1); // + 1 VERY IMPORTANT to add to avoid misarrangement of samples of Demonstrations
                 // numD++;
                 numT++;
+                std::cout << "numT" << numT << std::endl;
               }
               // pose = s->pose;
               // posesArray.header.frame_id = "iiwa_link_0";
@@ -133,7 +142,8 @@ class Data_Acq
               // ros::Duration(0.001).sleep();
               // // ROS_INFO_STREAM(posesArray);
               demonPoses.header.frame_id = "iiwa_link_0";
-              demonPoses.pose.orientation.y = s->header.seq - newseq + 1;
+              // demonPoses.pose.orientation.y = s->header.seq - newseq + 1;
+              demonPoses.pose.orientation.y = newseq;
               demonPoses.pose.position.x = s->pose.position.x;
               demonPoses.pose.position.y = s->pose.position.y;
               demonPoses.pose.position.z = s->pose.position.z;

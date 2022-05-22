@@ -138,6 +138,7 @@ public:
     double p = 2.0;  // the p-norm to use; 2.0 = euclidean, 1.0 = manhattan
     std::vector<std::vector<int> > path_x, path_y, path_z;
     std::vector<std::vector<std::vector<int> > > path_X, path_Y, path_Z;
+    std::vector<float> Dtw_XYZ;
     // std::vector<int> path_sizes;
 
     for (int D = 0; D < numTrajsamples.data.size(); D++)
@@ -151,6 +152,9 @@ public:
       std::cout << "Dtw_X distance: " << Dtw_X.distance << std::endl;
       std::cout << "Dtw_Y distance: " << Dtw_Y.distance << std::endl;
       std::cout << "Dtw_Z distance: " << Dtw_Z.distance << std::endl;
+
+      Dtw_XYZ.push_back(sqrt(pow(Dtw_X.distance,2) + pow(Dtw_Y.distance,2) + pow(Dtw_Z.distance,2)));
+      std::cout << "Dtw_XYZ distance: " << Dtw_XYZ[D]  << std::endl;
 
       path_x = Dtw_X.path();
       path_y = Dtw_Y.path();
@@ -186,10 +190,10 @@ public:
       //   }
     }
 
-    std::cout << "Post DTW total PATH: " << std::endl;
-    std::cout << path_X.size() << std::endl;
-    std::cout << path_Y.size() << std::endl;
-    std::cout << path_Z.size() << std::endl;
+    // std::cout << "Post DTW total PATH: " << std::endl;
+    // std::cout << path_X.size() << std::endl;
+    // std::cout << path_Y.size() << std::endl;
+    // std::cout << path_Z.size() << std::endl;
 
     // \_________ Dynamic Time Warping DTW _________ //
 
@@ -202,30 +206,36 @@ public:
 
     posesArray.header.frame_id = "iiwa_link_0";
     demonPoses.header.frame_id = "iiwa_link_0";
-
+    bool badD = false;
     for (int D = 0; D < numTrajsamples.data.size(); D++)    // numTrajsamples.data.size() must be equal to path_X.size() = no. of Demonstrations
     {
       wbag.open(std::string(DIR_DEMONS)+"Trial"+"_"+std::to_string(srvarr.response.numofTrialArr[D])+"_demon_DTW.bag", rosbag::bagmode::Write);
+      if (Dtw_XYZ[D] > 1.5) { std::cout << "Demon " << D+1 << " is a Bad one" << std::endl; badD = true;}
+      std::cout << "D: " << D+1 << '\n';
 
       for (int p = 0; p < demons_Z[maxindex].size(); p++)
       {
         // std::cout << demons_X[D][path_X[p][1]][0] << '\n';
         // std::cout << D << '\n';
-        pose.position.x = demons_X[D][path_X[D][p][1]][0];
-        pose.position.y = demons_Y[D][path_Y[D][p][1]][0];
-        pose.position.z = demons_Z[D][path_Z[D][p][1]][0];
-        pose.orientation.y = p;
-        posesArray.poses.push_back(pose);
-        ros::Duration(0.001).sleep();
+        if (badD == false)    // == only send the not bad (good) Demonstrations
+        {
+          pose.position.x = demons_X[D][path_X[D][p][1]][0];
+          pose.position.y = demons_Y[D][path_Y[D][p][1]][0];
+          pose.position.z = demons_Z[D][path_Z[D][p][1]][0];
+          pose.orientation.y = p;
+          posesArray.poses.push_back(pose);
+          ros::Duration(0.001).sleep();
+        }
 
         demonPoses.pose.position.x = demons_X[D][path_X[D][p][1]][0];
         demonPoses.pose.position.y = demons_Y[D][path_Y[D][p][1]][0];
         demonPoses.pose.position.z = demons_Z[D][path_Z[D][p][1]][0];
         demonPoses.pose.orientation.y = p;
-        // std::cout << p << '\n';
+        // std::cout << "p: " << p << '\n';
         wbag.write("/Demonstration/CartesianPose/demonsPoses", ros::Time::now(), demonPoses);
-        ros::Duration(0.001).sleep();
+        ros::Duration(0.002).sleep();
       }
+      badD = false;
       wbag.close();
     }
     posesArray_pub.publish(posesArray);
