@@ -206,12 +206,13 @@ public:
 
     posesArray.header.frame_id = "iiwa_link_0";
     demonPoses.header.frame_id = "iiwa_link_0";
-    bool badD = false;
+    bool badD = false; std::vector<int> goodDemons_idx; std::string goodDemons_idx_str = std::to_string(maxindex+1)+"_";
     for (int D = 0; D < numTrajsamples.data.size(); D++)    // numTrajsamples.data.size() must be equal to path_X.size() = no. of Demonstrations
     {
       wbag.open(std::string(DIR_DEMONS)+"Trial"+"_"+std::to_string(srvarr.response.numofTrialArr[D])+"_demon_DTW.bag", rosbag::bagmode::Write);
       if (Dtw_XYZ[D] > 1.5) { std::cout << "Demon " << D+1 << " is a Bad one" << std::endl; badD = true;}
-      std::cout << "D: " << D+1 << '\n';
+      else {goodDemons_idx.push_back(D+1);}
+      // std::cout << "D: " << D+1 << '\n';
 
       for (int p = 0; p < demons_Z[maxindex].size(); p++)
       {
@@ -238,8 +239,19 @@ public:
       badD = false;
       wbag.close();
     }
+    for (int i : goodDemons_idx) {goodDemons_idx_str += std::to_string(i)+" ";}
+    posesArray.header.frame_id = "{ " + goodDemons_idx_str + "}";
     posesArray_pub.publish(posesArray);
     // ros::Duration(0.001).sleep();
+    std::cout << "End of Trial" << std::endl;
+    // {
+    //   std::ofstream ftxt(std::string(DIR_TRAINING_DEMONS)+"AssemblyTimeofTrials.txt", std::ofstream::app);
+    //   if(ftxt.is_open())
+    //   {
+    //     ftxt << "The following Trial is Learned by Demons " + goodDemons_idx_str << std::endl;
+    //     ftxt << "\n";
+    //   }
+    // }
   }
     // \_________ Sending the Warped Trajectories _________ //
 };

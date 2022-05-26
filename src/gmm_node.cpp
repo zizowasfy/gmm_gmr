@@ -34,6 +34,7 @@
 #include <fstream>
 
 #include <onlineL_Params.hpp>
+#include <my_iiwa_pkg/Numoftrial.h>
 
 // custom
 #include "gmm_node.h"
@@ -68,7 +69,6 @@ class GMMNode
 
   GMMNode(ros::NodeHandle & nh): m_nh(nh), m_shutting_down_thread(&GMMNode::shutdownWaitingThread,this)
   {
-    // indexofLearnedTraj.data = 0;
     int temp_int;
     std::string temp_string;
     double temp_double;
@@ -96,9 +96,9 @@ class GMMNode
 
     learned_posesArray_pub = m_nh.advertise<geometry_msgs::PoseArray>("gmm/learned_trajectory",1000);
 
-    // indexofLearnedTraj_pub = m_nh.advertise<std_msgs::Int32>("learned_trajectory_index",1000);
-
     numTrajsamples_sub = m_nh.subscribe("/GMM/numberofSamplesinDemos", 1, &GMMNode::numTrajsamples_callback,this);
+    numofTrial_client = m_nh.serviceClient<my_iiwa_pkg::Numoftrial>("/numofTrial");
+
   }
 
   class TerminationHandler: public GMMExpectationMaximization::ITerminationHandler
@@ -285,14 +285,16 @@ class GMMNode
   ros::Publisher m_mix_publisher;
 
   ros::Publisher learned_posesArray_pub;
-  // ros::Publisher indexofLearnedTraj_pub;
+
   ros::Subscriber numTrajsamples_sub;
+  ros::ServiceClient numofTrial_client;
+
+  int numofTrial;
 
   int numTrajsamples;
 
   int minnumofDemons = 0;
 
-  std_msgs::Int32 indexofLearnedTraj;
 
   // this thread will simply wait for shutdown
   // and unlock all the conditions variables
@@ -348,7 +350,7 @@ class GMMNode
         out_xi.resize(numTrajsamples,xi.cols());
         out_xi=Eigen::MatrixXf::Zero(numTrajsamples, xi.cols());
 
-        std::cout<< "xi:" <<std::endl << xi.size() <<std::endl;
+        std::cout<< "xi:" <<std::endl << xi.size()/4 <<std::endl;
         std::cout<< "means.size(): " << means.size() <<std::endl;
         std::cout<< "covariances: " << covariances.size() <<std::endl;
         std::cout<< "weights: " << weights.size() <<std::endl;
@@ -417,17 +419,20 @@ class GMMNode
 
         // Publish the learned_trajectory on topic /gmm_node/gmm/learned_trajectory
         learned_posesArray_pub.publish(learned_posesArray);
-        indexofLearnedTraj.data++;
-        // indexofLearnedTraj_pub.publish(indexofLearnedTraj);
+
         // Save the learned_trajectory in a bag file
-        wbag.open(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory_"+std::to_string(indexofLearnedTraj.data)+".bag", rosbag::bagmode::Write);
+        my_iiwa_pkg::Numoftrial srv;
+        if (numofTrial_client.call(srv)) { ROS_INFO("numofTrial: %ld", (long int)srv.response.numofTrial); }
+        else { ROS_ERROR("Failed to call service numofTrial"); }
+
+        wbag.open(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory_"+std::to_string(srv.response.numofTrial)+".bag", rosbag::bagmode::Write);
         ros::Duration(0.001).sleep();
         wbag.write("/gmm_node/gmm/learned_trajectory", ros::Time::now(), learned_posesArray);  // save the learned_trajectory in a bag file
         ros::Duration(0.001).sleep();
         wbag.close();
         // \Save the learned_trajectory in a bag file
         // Make a copy of this bag file
-        std::ifstream  src(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory_"+std::to_string(indexofLearnedTraj.data)+".bag", std::ios::binary);
+        std::ifstream  src(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory_"+std::to_string(srv.response.numofTrial)+".bag", std::ios::binary);
         std::ofstream  dst(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory.bag", std::ios::binary);
         dst << src.rdbuf();
         // \Make a copy of this bag file

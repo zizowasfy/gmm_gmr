@@ -96,18 +96,24 @@ int main(int argc, char **argv)
   // wbag.open(std::string(DIR_NEW_DEMONS)+"newDemonss"+"/test.bag", rosbag::bagmode::Write);
   // wbag.close();
   ////
-  ros::init(argc, argv,"ros_test_node");
-  ros::NodeHandle nh;
-  ros::ServiceClient numofTrial_client = nh.serviceClient<my_iiwa_pkg::Numoftrial>("/numofTrial");
+  // ros::init(argc, argv,"ros_test_node");
+  // ros::NodeHandle nh;
+  // ros::ServiceClient numofTrial_client = nh.serviceClient<my_iiwa_pkg::Numoftrial>("/numofTrial");
+  //
+  // my_iiwa_pkg::Numoftrial srv;
+  // numofTrial_client.call(srv);
+  // if (numofTrial_client.call(srv))
+  // {
+  //   ROS_INFO("Sum: %ld", (long int)srv.response.numofTrial);
+  // }
+  // else
+  // {
+  //   ROS_ERROR("Failed to call service add_two_ints");
+  // }
+  ////
+  std::vector<int> v = {1,2,3};
 
-  my_iiwa_pkg::Numoftrial srv;
-  numofTrial_client.call(srv);
-  if (numofTrial_client.call(srv))
-  {
-    ROS_INFO("Sum: %ld", (long int)srv.response.numofTrial);
-  }
-  else
-  {
-    ROS_ERROR("Failed to call service add_two_ints");
-  }
+  std::string str;
+  for (int i : v) {str+=(std::to_string(i)+" ");}
+  std::cout << "{" << str << "}" << std::endl;
 }
