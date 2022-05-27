@@ -32,8 +32,11 @@
 
 // ROS
 #include <ros/ros.h>
+#include <rosbag/bag.h>
 #include <geometry_msgs/PoseArray.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <std_msgs/Float32MultiArray.h>
+#include <std_msgs/Int32MultiArray.h>
 
 // STL
 #include <vector>
@@ -48,6 +51,8 @@
 #define FORMAT_DY    "dy"
 #define FORMAT_DZ    "dz"
 #define COUNT_FORMAT 7
+
+geometry_msgs::PoseStamped demonPoses;
 
 static const char * const FORMAT_ALL[COUNT_FORMAT] =
   {
@@ -109,7 +114,7 @@ class FormatString
     return m_is_valid;
   }
 
-  std::vector<float> format(const geometry_msgs::PoseArray & poses,uint index) const
+  std::vector<float> format(const geometry_msgs::PoseArray & poses,uint index) const // , uint inum
   {
     std::vector<float> result;
     result.reserve(m_pars.size());
@@ -120,7 +125,9 @@ class FormatString
     for (uint i = 0; i < m_pars.size(); i++)
     {
       if (m_pars[i] == FORMAT_INDEX)
-        result.push_back(float(index));
+        // result.push_back(float(index));
+        // result.push_back(float(inum));
+        result.push_back(float(poses.poses[index].orientation.y));
       else if (m_pars[i] == FORMAT_X)
         result.push_back(poses.poses[index].position.x);
       else if (m_pars[i] == FORMAT_Y)
@@ -128,12 +135,18 @@ class FormatString
       else if (m_pars[i] == FORMAT_Z)
         result.push_back(poses.poses[index].position.z);
       else if (m_pars[i] == FORMAT_DX)
+        // result.push_back(float(inum));
         result.push_back(poses.poses[ip].position.x - poses.poses[im].position.x);
       else if (m_pars[i] == FORMAT_DY)
         result.push_back(poses.poses[ip].position.y - poses.poses[im].position.y);
       else if (m_pars[i] == FORMAT_DZ)
         result.push_back(poses.poses[ip].position.z - poses.poses[im].position.z);
     }
+
+    // demonPoses.pose.orientation.y = inum;
+    // demonPoses.pose.position.x = poses.poses[index].position.x;
+    // demonPoses.pose.position.y = poses.poses[index].position.y;
+    // demonPoses.pose.position.z = poses.poses[index].position.z;
 
     return result;
   }
@@ -154,6 +167,10 @@ class TrajectoryConverter
 
     m_nh.param<std::string>(PARAM_NAME_INPUT_TRAJ_TOPIC,temp_string,PARAM_DEFAULT_INPUT_TRAJ_TOPIC);
     m_input = m_nh.subscribe(temp_string,5,&TrajectoryConverter::onNewInput,this);
+
+    numTrajsamples_sub = m_nh.subscribe("/GMM/numberofSamplesinDemos", 1, &TrajectoryConverter::numTrajsamples_callback, this);
+    // creating publisher for publishing the poses of all demonstrations for plotting and other uses // NOT NEEDED ANYMORE
+    // demonPoses_pub = m_nh.advertise<geometry_msgs::PoseStamped>("/Demonstration/demonsPoses",100);
 
     m_nh.param<std::string>(PARAM_NAME_OUTPUT_DATA_TOPIC,temp_string,PARAM_DEFAULT_OUTPUT_DATA_TOPIC);
     m_output = m_nh.advertise<std_msgs::Float32MultiArray>(temp_string,5);
@@ -178,6 +195,9 @@ class TrajectoryConverter
     out->layout.dim[0].size = poses.poses.size();
 
     out->data.resize(poses.poses.size() * ndim);
+
+    // std::cout << poses.poses.size() << std::endl;
+
     for (uint i = 0; i < poses.poses.size(); i++)
     {
       std::vector<float> pars = m_format_string->format(poses,i);
@@ -186,6 +206,38 @@ class TrajectoryConverter
         out->data[i * ndim + h] = pars[h];
       }
     }
+    // // Added by Zizo Shaarawy
+    // // This code snippet arranges the demonstrations data so that they can be sent to the gmm_node PoseArray.
+    // // This code snippet numbers each demon 0 -> N
+    // rosbag::Bag bag; uint numD = 1;
+    // uint i = 0;
+    // uint prevD = 0;
+    // uint inum = 0;
+    //
+    // for (uint D : numTrajsamples.data)
+    // {
+    //   bag.open("/home/mo/robotL_ws/src/record_data/GMM_data/Demons_Poses/demon"+std::to_string(numD)+".bag", rosbag::bagmode::Write);
+    //
+    //   inum = 0;
+    //   for (i; i < D+prevD; i++)
+    //   {
+    //     std::vector<float> pars = m_format_string->format(poses,i,inum);
+    //     // demonPoses_pub.publish(demonPoses);
+    //     bag.write("/Demonstration/demonsPoses", ros::Time::now(), demonPoses);
+    //     // ros::Duration(0.001).sleep();
+    //     for (uint h = 0; h < ndim; h++)
+    //     {
+    //       out->data[i * ndim + h] = pars[h];
+    //     }
+    //     // std::cout << inum << std::endl;
+    //     inum++;
+    //   }
+    //   // std::cout << "D:" << D << std::endl;
+    //   prevD = D+prevD;
+    //   numD++;
+    //   bag.close();
+    // }
+    // // \ Added by Zizo Shaarawy
 
     m_output.publish(out);
   }
@@ -195,6 +247,16 @@ class TrajectoryConverter
 
   ros::Subscriber m_input;
   ros::Publisher m_output;
+
+  ros::Subscriber numTrajsamples_sub;
+  // ros::Publisher demonPoses_pub;
+  std_msgs::Int32MultiArray numTrajsamples;
+
+
+  void numTrajsamples_callback(std_msgs::Int32MultiArray msg)
+  {
+    numTrajsamples = msg;
+  }
 
   FormatString::Ptr m_format_string;
 };

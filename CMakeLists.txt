@@ -6,6 +6,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   cmake_modules
+  rosbag
 )
 
 find_package(Boost REQUIRED)
@@ -43,8 +44,10 @@ catkin_package(
 ###########
 
 include_directories(
+
   include
   ${catkin_INCLUDE_DIRS}
+	~/Kuka_iiwa/src/my_iiwa_pkg/include
 )
 
 add_library(gaussian_mixture_model
@@ -80,8 +83,18 @@ target_link_libraries(gaussian_mixture_model_trajectory_converter
   ${catkin_LIBRARIES}
   )
 
+## Added by zizowasfy
+add_executable(dtw_test src/dtw_test.cpp)
+target_link_libraries(dtw_test ${catkin_LIBRARIES})
+
+add_executable(Data_Acq src/data_acq.cpp)
+target_link_libraries(Data_Acq ${catkin_LIBRARIES})
+
+add_executable(demons_DTW src/demons_DTW.cpp)
+target_link_libraries(demons_DTW ${catkin_LIBRARIES})
+## \Added by zizowasfy
+
+
 #############
 ## Install ##
 #############
-
-

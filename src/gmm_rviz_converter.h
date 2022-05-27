@@ -38,10 +38,10 @@
 #define PARAM_DEFAULT_OUTPUT_TOPIC "/gmm_rviz_converter_output"
 
 #define PARAM_NAME_FRAME_ID        "frame_id"
-#define PARAM_DEFAULT_FRAME_ID     "/root"
+#define PARAM_DEFAULT_FRAME_ID     "iiwa_link_0"
 
 #define PARAM_NAME_SCALE           "scale"
-#define PARAM_DEFAULT_SCALE        (double(10.0))
+#define PARAM_DEFAULT_SCALE        (double(10.0)) // 10.0
 
 // if true, relative size of gaussians based on eigenvalues will be disregarded
 #define PARAM_NAME_NORMALIZE       "normalize"
