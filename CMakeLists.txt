@@ -6,6 +6,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   cmake_modules
+  rosbag
 )
 
 find_package(Boost REQUIRED)

@@ -36,7 +36,12 @@
 
 // ROS
 #include <ros/ros.h>
+#include <rosbag/bag.h>
+#include <rosbag/view.h>
 #include <std_msgs/Float32MultiArray.h>
+#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/PoseArray.h> 
+#include <franka_msgs/FrankaState.h>
 
 // Boost
 #include <boost/thread/mutex.hpp>
@@ -48,6 +53,12 @@
 
 // Eigen
 #include <Eigen/Dense>
+
+//
+#include <boost/filesystem.hpp>
+using namespace boost::filesystem;
+
+#include <data_handle/DemonsInfo.h>
 
 class GMMNode
 {
@@ -80,6 +91,11 @@ class GMMNode
 
     m_nh.param<std::string>(PARAM_NAME_MIX_OUTPUT_TOPIC,temp_string,PARAM_DEFAULT_MIX_OUTPUT_TOPIC);
     m_mix_publisher = m_nh.advertise<gaussian_mixture_model::GaussianMixture>(temp_string,2);
+
+    client = m_nh.serviceClient<data_handle::DemonsInfo>("/DemonsInfo_Service");
+
+    learned_posesArray_pub = m_nh.advertise<geometry_msgs::PoseArray>("/gmm/learned_trajectory",1000);
+
   }
 
   class TerminationHandler: public GMMExpectationMaximization::ITerminationHandler
@@ -117,6 +133,7 @@ class GMMNode
 
       if (rosdata->layout.dim.size() != 2)
       {
+        ROS_INFO_STREAM(rosdata->layout.dim.size());
         ROS_ERROR("gmm: input array must contain two dimensions!!");
         continue;
       }
@@ -216,6 +233,8 @@ class GMMNode
             g.covariances[i * dim + h] = covariances[s](i,h);
       }
 
+      doRegression(eigendata,  means, weights , covariances);
+
       m_mix_publisher.publish(mix_msg);
       ROS_INFO("gmm: message sent.");
     }
@@ -238,6 +257,173 @@ class GMMNode
       m_queue_cond.notify_all();
     }
   }
+  
+  // this function compute PDF of X which has lenght of k
+  float computeNormalDistributionPDF(Eigen::VectorXf X, Eigen::VectorXf mean, Eigen::MatrixXf covariance)
+  {
+      float nominator, denominator,tmp;
+
+
+      Eigen::MatrixXf tmp_nominator_matrixXf;
+      tmp_nominator_matrixXf=( X.transpose()-mean.transpose() )  * covariance.inverse() *  (X-mean) ;
+      tmp=-0.5*tmp_nominator_matrixXf(0,0);
+      nominator=std::exp (tmp);
+
+      int k=X.rows();
+
+      tmp=std::pow(2*M_PI,k) *covariance.determinant();
+      denominator=std::pow( tmp, 0.5 );
+      return  (nominator/denominator);
+  }
+  
+  void doRegression(Eigen::MatrixXf  xi, const std::vector<Eigen::VectorXf>  means, const std::vector<float>  weights , const std::vector<Eigen::MatrixXf>  covariances)
+  {
+    std::cout << "    *** Starting Regression ***    " << std::endl;
+    
+    int numTrajsamples;     // number of points in the chosen trajectory
+    std::string trajDir;
+    geometry_msgs::PoseArray learned_posesArray;
+    geometry_msgs::Pose pose;
+    rosbag::Bag rbag, wbag;
+
+    if (client.call(srv))
+    {
+      numTrajsamples = srv.response.numofposes[srv.response.shortest_idx];
+    }
+    else {ROS_ERROR("Failed to call service 'DemonsInfo'");}
+    std::string path = "/home/zizo/Disassembly Teleop/Demons/Rcover/place";
+    int i = 0;
+    for (const auto& dirEntry : recursive_directory_iterator(path)) 
+    { 
+      // trajDir = i == srv.response.shortest_idx ? dirEntry.path().string() : "why";
+      if (i == srv.response.shortest_idx) {trajDir = dirEntry.path().string(); break;}
+      i++;
+    }
+    
+    // std::cout << "xi:" << xi << std::endl;
+    std::cout << "numTrajsamples:" << numTrajsamples << std::endl;
+    std::cout << trajDir << std::endl;
+
+    Eigen::VectorXf X;
+    Eigen::VectorXf mean;
+    Eigen::MatrixXf covariance;
+
+    Eigen::MatrixXf out_xi;
+
+    // out_xi.resize(xi.rows() ,xi.cols());
+    // out_xi=Eigen::MatrixXf::Zero(xi.rows(), xi.cols());
+    // numTrajsamples = 703;
+    out_xi.resize(numTrajsamples, xi.cols());
+    out_xi=Eigen::MatrixXf::Zero(numTrajsamples, xi.cols());
+
+    std::cout<< "xi:" <<std::endl << xi.size()/4 <<std::endl;
+    std::cout<< "means.size(): " << means.size() <<std::endl;
+    std::cout<< "covariances: " << covariances.size() <<std::endl;
+    std::cout<< "weights: " << weights.size() <<std::endl;
+
+    // std::cout<< "means(): " << *means.data() <<std::endl;
+
+
+
+  //equation 10
+    float xi_hat_s_k, mu_s_k,mu_t_k,sigma_st_k,inv_sigma_t_k,sigma_hat_s_k,
+          sigma_s_k, sigma_t_k,sigma_ts_k, xi_t, beta_k,xi_hat_s,beta_k_sum, beta_k_xi_hat_s_k_sum;
+    // for(std::size_t i=0; i<numTrajsamples ; i++)      // loop over every point in the Trajectory
+    rbag.open(trajDir);
+    i = 0;
+    for (rosbag::MessageInstance const m : rosbag::View(rbag))
+    {
+      franka_msgs::FrankaState::ConstPtr mp = m.instantiate<franka_msgs::FrankaState>();
+        for(std::size_t coord=1; coord<out_xi.cols(); coord++)    // loop over the xyz coordinates
+        {
+          beta_k_sum=0;
+          beta_k_xi_hat_s_k_sum=0;
+          for(std::size_t k=0; k<means.size(); k++)     // loop over the number of gaussians
+          {
+            mu_t_k=means.at(k)(0);
+            mu_s_k=means.at(k)(coord);
+            sigma_st_k=covariances.at(k)(coord,0);
+            sigma_t_k=covariances.at(k)(0,0);
+            inv_sigma_t_k=1/sigma_t_k;
+            sigma_s_k=covariances.at(k)(coord,coord);
+            sigma_ts_k=covariances.at(k)(0,coord);
+            // xi_t=xi(i,0);
+            // xi_t = i;
+            xi_t = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2));
+            // xi_t = xi(i,3);
+            xi_hat_s_k=mu_s_k+ sigma_st_k*inv_sigma_t_k*(xi_t -mu_t_k);
+            sigma_hat_s_k=sigma_s_k -sigma_st_k*inv_sigma_t_k*sigma_ts_k;
+
+
+            //equation 11
+
+            X.resize(1,1);
+            mean.resize(1,1);
+            covariance.resize(1,1);
+
+
+
+            X<<xi_t;
+            mean<<mu_t_k;
+
+            covariance<<sigma_t_k;
+
+
+
+
+            beta_k=weights.at(k) * computeNormalDistributionPDF(X, mean,covariance);
+            beta_k_sum=beta_k_sum+beta_k;
+
+            xi_hat_s=beta_k*xi_hat_s_k;
+            beta_k_xi_hat_s_k_sum=beta_k_xi_hat_s_k_sum+xi_hat_s;
+          }
+          out_xi(i,0)=xi_t;
+          out_xi(i,coord)=beta_k_xi_hat_s_k_sum/beta_k_sum;
+        }
+        pose.position.x = out_xi(i,1); pose.position.y = out_xi(i,2); pose.position.z = out_xi(i,3);
+        // pose.position.x = out_xi(i,0); pose.position.y = out_xi(i,1); pose.position.z = out_xi(i,2);
+        // pose.orientation.z = out_xi(i,0);
+        learned_posesArray.poses.push_back(pose);
+        i++;
+    }
+    learned_posesArray.header.frame_id = "panda_link0";
+
+    // Publish the learned_trajectory on topic /gmm_node/gmm/learned_trajectory
+    learned_posesArray_pub.publish(learned_posesArray);
+
+    // // Save the learned_trajectory in a bag file
+    // my_iiwa_pkg::Numoftrial srv;
+    // if (numofTrial_client.call(srv)) { ROS_INFO("numofTrial: %ld", (long int)srv.response.numofTrial); }
+    // else { ROS_ERROR("Failed to call service numofTrial"); }
+
+    // wbag.open(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory_"+std::to_string(srv.response.numofTrial)+".bag", rosbag::bagmode::Write);
+    // ros::Duration(0.001).sleep();
+    // wbag.write("/gmm_node/gmm/learned_trajectory", ros::Time::now(), learned_posesArray);  // save the learned_trajectory in a bag file
+    // ros::Duration(0.001).sleep();
+    // wbag.close();
+    // // \Save the learned_trajectory in a bag file
+    // // Make a copy of this bag file
+    // std::ifstream  src(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory_"+std::to_string(srv.response.numofTrial)+".bag", std::ios::binary);
+    // std::ofstream  dst(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory.bag", std::ios::binary);
+    // dst << src.rdbuf();
+    // // \Make a copy of this bag file
+
+    std::cout<< "-------------------------------------" <<std::endl;
+
+    std::cout<< "out_xi:" <<std::endl <<out_xi <<std::endl;
+
+
+    std::cout<< "out_xi.rows():"  <<out_xi.rows() <<std::endl;
+    std::cout<< "out_xi.cols():"  <<out_xi.cols() <<std::endl;
+
+
+    // std::cout<< "out_xi:"  <<std::endl << out_xi <<std::endl;
+    // for(std::size_t i=0;i<out_xi.rows();i++)
+    // {
+    //     std::cout<< out_xi(i,1) <<" , " <<std::endl;
+    // }
+
+  }
 
   private:
   ros::NodeHandle & m_nh;
@@ -256,6 +442,10 @@ class GMMNode
 
   ros::Subscriber m_data_subscriber;
   ros::Publisher m_mix_publisher;
+
+  ros::ServiceClient client;
+  data_handle::DemonsInfo srv;
+  ros::Publisher learned_posesArray_pub;
 
   // this thread will simply wait for shutdown
   // and unlock all the conditions variables

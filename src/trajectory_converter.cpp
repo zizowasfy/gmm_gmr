@@ -120,7 +120,8 @@ class FormatString
     for (uint i = 0; i < m_pars.size(); i++)
     {
       if (m_pars[i] == FORMAT_INDEX)
-        result.push_back(float(index));
+        // result.push_back(float(index));
+        result.push_back(poses.poses[index].orientation.w);
       else if (m_pars[i] == FORMAT_X)
         result.push_back(poses.poses[index].position.x);
       else if (m_pars[i] == FORMAT_Y)
