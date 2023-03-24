@@ -40,6 +40,7 @@
 #include <rosbag/view.h>
 #include <std_msgs/Float32MultiArray.h>
 #include <geometry_msgs/Pose.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/PoseArray.h> 
 #include <franka_msgs/FrankaState.h>
 
@@ -55,6 +56,8 @@
 #include <Eigen/Dense>
 
 //
+#include <iostream>
+#include <fstream>
 #include <boost/filesystem.hpp>
 using namespace boost::filesystem;
 
@@ -94,8 +97,11 @@ class GMMNode
 
     client = m_nh.serviceClient<data_handle::DemonsInfo>("/DemonsInfo_Service");
 
-    learned_posesArray_pub = m_nh.advertise<geometry_msgs::PoseArray>("/gmm/learned_trajectory",1000);
+    // learned_posesArray_pub = m_nh.advertise<geometry_msgs::PoseArray>("/gmm/learned_trajectory",1000);
 
+    learned_pose_pub = m_nh.advertise<geometry_msgs::PoseStamped>("/gmm/learned_pose", 100);
+
+    pose_regression_sub = m_nh.subscribe("/robot_ee_cartesianpose", 100, &GMMNode::poseRegressionCallback, this);
   }
 
   class TerminationHandler: public GMMExpectationMaximization::ITerminationHandler
@@ -150,10 +156,12 @@ class GMMNode
       }
 
       // convert input data
-      Eigen::MatrixXf eigendata(ndata,dim);
+      eigendata.resize(ndata,dim);
+      
       for (uint i = 0; i < ndata; i++)
         for (uint h = 0; h < dim; h++)
           eigendata(i,h) = rosdata->data[dim * i + h];
+
 
       // execute and find the best (lower) bic
       uint best_num_gauss = 0;
@@ -211,9 +219,9 @@ class GMMNode
       ROS_INFO("gmm: chosen gaussian count %u",best_num_gauss);
 
       // create the message and send
-      const std::vector<Eigen::VectorXf> & means = best_g->getMeans();
-      const std::vector<float> & weights = best_g->getWeights();
-      const std::vector<Eigen::MatrixXf> & covariances = best_g->getCovariances();
+      means = best_g->getMeans();
+      weights = best_g->getWeights();
+      covariances = best_g->getCovariances();
 
       gaussian_mixture_model::GaussianMixturePtr mix_msg = gaussian_mixture_model::GaussianMixturePtr(new gaussian_mixture_model::GaussianMixture);
       mix_msg->bic = best_bic;
@@ -233,10 +241,11 @@ class GMMNode
             g.covariances[i * dim + h] = covariances[s](i,h);
       }
 
-      doRegression(eigendata,  means, weights , covariances);
+      // doRegression(eigendata,  means, weights , covariances);
 
       m_mix_publisher.publish(mix_msg);
       ROS_INFO("gmm: message sent.");
+      data_recevied = true;
     }
   }
 
@@ -261,7 +270,7 @@ class GMMNode
   // this function compute PDF of X which has lenght of k
   float computeNormalDistributionPDF(Eigen::VectorXf X, Eigen::VectorXf mean, Eigen::MatrixXf covariance)
   {
-      float nominator, denominator,tmp;
+      float nominator, denominator, tmp;
 
 
       Eigen::MatrixXf tmp_nominator_matrixXf;
@@ -280,29 +289,12 @@ class GMMNode
   {
     std::cout << "    *** Starting Regression ***    " << std::endl;
     
-    int numTrajsamples;     // number of points in the chosen trajectory
+    int numTrajsamples = 1;     // number of points in the chosen trajectory
+    int i = 0;
     std::string trajDir;
     geometry_msgs::PoseArray learned_posesArray;
-    geometry_msgs::Pose pose;
+    geometry_msgs::PoseStamped pose;
     rosbag::Bag rbag, wbag;
-
-    if (client.call(srv))
-    {
-      numTrajsamples = srv.response.numofposes[srv.response.shortest_idx];
-    }
-    else {ROS_ERROR("Failed to call service 'DemonsInfo'");}
-    std::string path = "/home/zizo/Disassembly Teleop/Demons/Rcover/place";
-    int i = 0;
-    for (const auto& dirEntry : recursive_directory_iterator(path)) 
-    { 
-      // trajDir = i == srv.response.shortest_idx ? dirEntry.path().string() : "why";
-      if (i == srv.response.shortest_idx) {trajDir = dirEntry.path().string(); break;}
-      i++;
-    }
-    
-    // std::cout << "xi:" << xi << std::endl;
-    std::cout << "numTrajsamples:" << numTrajsamples << std::endl;
-    std::cout << trajDir << std::endl;
 
     Eigen::VectorXf X;
     Eigen::VectorXf mean;
@@ -316,97 +308,77 @@ class GMMNode
     out_xi.resize(numTrajsamples, xi.cols());
     out_xi=Eigen::MatrixXf::Zero(numTrajsamples, xi.cols());
 
+    std::cout << "numTrajsamples:" << numTrajsamples << std::endl;
     std::cout<< "xi:" <<std::endl << xi.size()/4 <<std::endl;
     std::cout<< "means.size(): " << means.size() <<std::endl;
     std::cout<< "covariances: " << covariances.size() <<std::endl;
     std::cout<< "weights: " << weights.size() <<std::endl;
-
-    // std::cout<< "means(): " << *means.data() <<std::endl;
 
 
 
   //equation 10
     float xi_hat_s_k, mu_s_k,mu_t_k,sigma_st_k,inv_sigma_t_k,sigma_hat_s_k,
           sigma_s_k, sigma_t_k,sigma_ts_k, xi_t, beta_k,xi_hat_s,beta_k_sum, beta_k_xi_hat_s_k_sum;
-    // for(std::size_t i=0; i<numTrajsamples ; i++)      // loop over every point in the Trajectory
-    rbag.open(trajDir);
-    i = 0;
-    for (rosbag::MessageInstance const m : rosbag::View(rbag))
+
+    for(std::size_t coord=1; coord<out_xi.cols(); coord++)    // loop over the xyz coordinates
     {
-      franka_msgs::FrankaState::ConstPtr mp = m.instantiate<franka_msgs::FrankaState>();
-        for(std::size_t coord=1; coord<out_xi.cols(); coord++)    // loop over the xyz coordinates
-        {
-          beta_k_sum=0;
-          beta_k_xi_hat_s_k_sum=0;
-          for(std::size_t k=0; k<means.size(); k++)     // loop over the number of gaussians
-          {
-            mu_t_k=means.at(k)(0);
-            mu_s_k=means.at(k)(coord);
-            sigma_st_k=covariances.at(k)(coord,0);
-            sigma_t_k=covariances.at(k)(0,0);
-            inv_sigma_t_k=1/sigma_t_k;
-            sigma_s_k=covariances.at(k)(coord,coord);
-            sigma_ts_k=covariances.at(k)(0,coord);
-            // xi_t=xi(i,0);
-            // xi_t = i;
-            xi_t = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2));
-            // xi_t = xi(i,3);
-            xi_hat_s_k=mu_s_k+ sigma_st_k*inv_sigma_t_k*(xi_t -mu_t_k);
-            sigma_hat_s_k=sigma_s_k -sigma_st_k*inv_sigma_t_k*sigma_ts_k;
+      beta_k_sum=0;
+      beta_k_xi_hat_s_k_sum=0;
+      for(std::size_t k=0; k<means.size(); k++)     // loop over the number of gaussians
+      {
+        mu_t_k=means.at(k)(0);
+        mu_s_k=means.at(k)(coord);
+        sigma_st_k=covariances.at(k)(coord,0);
+        sigma_t_k=covariances.at(k)(0,0);
+        inv_sigma_t_k=1/sigma_t_k;
+        sigma_s_k=covariances.at(k)(coord,coord);
+        sigma_ts_k=covariances.at(k)(0,coord);
+        // xi_t=xi(i,0);
+        // xi_t = i;
+        // xi_t = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2));
+        xi_t = pose_regress;
+        // xi_t = xi(i,3);
+        xi_hat_s_k=mu_s_k+ sigma_st_k*inv_sigma_t_k*(xi_t -mu_t_k);
+        sigma_hat_s_k=sigma_s_k -sigma_st_k*inv_sigma_t_k*sigma_ts_k;
 
 
-            //equation 11
+        //equation 11
 
-            X.resize(1,1);
-            mean.resize(1,1);
-            covariance.resize(1,1);
+        X.resize(1,1);
+        mean.resize(1,1);
+        covariance.resize(1,1);
 
 
 
-            X<<xi_t;
-            mean<<mu_t_k;
+        X<<xi_t;
+        mean<<mu_t_k;
 
-            covariance<<sigma_t_k;
+        covariance<<sigma_t_k;
 
 
 
 
-            beta_k=weights.at(k) * computeNormalDistributionPDF(X, mean,covariance);
-            beta_k_sum=beta_k_sum+beta_k;
+        beta_k=weights.at(k) * computeNormalDistributionPDF(X, mean,covariance);
+        beta_k_sum=beta_k_sum+beta_k;
 
-            xi_hat_s=beta_k*xi_hat_s_k;
-            beta_k_xi_hat_s_k_sum=beta_k_xi_hat_s_k_sum+xi_hat_s;
-          }
-          out_xi(i,0)=xi_t;
-          out_xi(i,coord)=beta_k_xi_hat_s_k_sum/beta_k_sum;
-        }
-        pose.position.x = out_xi(i,1); pose.position.y = out_xi(i,2); pose.position.z = out_xi(i,3);
-        // pose.position.x = out_xi(i,0); pose.position.y = out_xi(i,1); pose.position.z = out_xi(i,2);
-        // pose.orientation.z = out_xi(i,0);
-        learned_posesArray.poses.push_back(pose);
-        i++;
+        xi_hat_s=beta_k*xi_hat_s_k;
+        beta_k_xi_hat_s_k_sum=beta_k_xi_hat_s_k_sum+xi_hat_s;
+      }
+      out_xi(0,0)=xi_t;
+      out_xi(0,coord)=beta_k_xi_hat_s_k_sum/beta_k_sum;
     }
-    learned_posesArray.header.frame_id = "panda_link0";
+    
+    pose.pose.position.x = out_xi(0,1); pose.pose.position.y = out_xi(0,2); pose.pose.position.z = out_xi(0,3);
+
 
     // Publish the learned_trajectory on topic /gmm_node/gmm/learned_trajectory
-    learned_posesArray_pub.publish(learned_posesArray);
+    pose.header.frame_id = "panda_link0";
+    learned_pose_pub.publish(pose);
 
-    // // Save the learned_trajectory in a bag file
-    // my_iiwa_pkg::Numoftrial srv;
-    // if (numofTrial_client.call(srv)) { ROS_INFO("numofTrial: %ld", (long int)srv.response.numofTrial); }
-    // else { ROS_ERROR("Failed to call service numofTrial"); }
-
-    // wbag.open(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory_"+std::to_string(srv.response.numofTrial)+".bag", rosbag::bagmode::Write);
-    // ros::Duration(0.001).sleep();
-    // wbag.write("/gmm_node/gmm/learned_trajectory", ros::Time::now(), learned_posesArray);  // save the learned_trajectory in a bag file
-    // ros::Duration(0.001).sleep();
-    // wbag.close();
-    // // \Save the learned_trajectory in a bag file
-    // // Make a copy of this bag file
-    // std::ifstream  src(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory_"+std::to_string(srv.response.numofTrial)+".bag", std::ios::binary);
-    // std::ofstream  dst(std::string(DIR_LEARNEDTRAJ)+"learned-trajectory.bag", std::ios::binary);
-    // dst << src.rdbuf();
-    // // \Make a copy of this bag file
+    // debugfile.open("debug_regression.txt");
+    // debugfile << out_xi(0,0);// << " " << out_xi(0,1) << " " << out_xi(0,2) << " " << out_xi(0,2) << "\n";
+    // // debugfile.close();
+    ros::Duration(0.2).sleep();
 
     std::cout<< "-------------------------------------" <<std::endl;
 
@@ -416,13 +388,20 @@ class GMMNode
     std::cout<< "out_xi.rows():"  <<out_xi.rows() <<std::endl;
     std::cout<< "out_xi.cols():"  <<out_xi.cols() <<std::endl;
 
+  }
 
-    // std::cout<< "out_xi:"  <<std::endl << out_xi <<std::endl;
-    // for(std::size_t i=0;i<out_xi.rows();i++)
-    // {
-    //     std::cout<< out_xi(i,1) <<" , " <<std::endl;
-    // }
+  void poseRegressionCallback(const geometry_msgs::PoseStampedConstPtr& msg)
+  {
+    pose_regress = sqrt(pow(msg->pose.position.x,2) + pow(msg->pose.position.y,2) + pow(msg->pose.position.z,2));
+    // std::cout << "pose_regress: " << pose_regress << std::endl;
+    // std::cout << "m_queue.size(): " << m_queue.size() << std::endl;
+    // std::cout << "covariances.size(): " << covariances.size() << std::endl;
 
+    if (pose_regress > 0.001 && data_recevied)
+    {
+      std::cout << "*** DOING Regression ***" << std::endl;
+      doRegression(eigendata,  means, weights , covariances);
+    }
   }
 
   private:
@@ -443,9 +422,20 @@ class GMMNode
   ros::Subscriber m_data_subscriber;
   ros::Publisher m_mix_publisher;
 
+  bool data_recevied = false;
+  Eigen::MatrixXf eigendata;
+  std::vector<Eigen::VectorXf> means;
+  std::vector<float> weights;
+  std::vector<Eigen::MatrixXf> covariances;
+
   ros::ServiceClient client;
   data_handle::DemonsInfo srv;
   ros::Publisher learned_posesArray_pub;
+  ros::Publisher learned_pose_pub;
+  ros::Subscriber pose_regression_sub;    // Receives the current pose of the robot to regress over each pose
+  float pose_regress;
+
+  fstream debugfile;
 
   // this thread will simply wait for shutdown
   // and unlock all the conditions variables
