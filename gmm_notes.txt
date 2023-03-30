@@ -1,0 +1,8 @@
+** Sampling over the Euclidean distance (sqrt(...))
+- if given a point not in the training data (demons), the GMR cannot regress 
+and/or perfrom arbitrarly -- generates poses in the opposite direction (??!! not 
+in the opposite direction, it just regresses outside the gaussians of the GMM)
+
+
+** Sample over each axis (xyz) separately 
+

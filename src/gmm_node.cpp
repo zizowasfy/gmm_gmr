@@ -102,6 +102,8 @@ class GMMNode
     learned_pose_pub = m_nh.advertise<geometry_msgs::PoseStamped>("/gmm/learned_pose", 100);
 
     pose_regression_sub = m_nh.subscribe("/robot_ee_cartesianpose", 100, &GMMNode::poseRegressionCallback, this);
+
+    out_xp.resize(1, 4); out_xp(0,0) = 100000;
   }
 
   class TerminationHandler: public GMMExpectationMaximization::ITerminationHandler
@@ -243,9 +245,14 @@ class GMMNode
 
       // doRegression(eigendata,  means, weights , covariances);
 
+      Eigendata.push_back(eigendata);
+      Means.push_back(means);
+      Weights.push_back(weights);
+      Covariances.push_back(covariances);
+
       m_mix_publisher.publish(mix_msg);
       ROS_INFO("gmm: message sent.");
-      data_recevied = true;
+      data_received++;
     }
   }
 
@@ -287,7 +294,7 @@ class GMMNode
   
   void doRegression(Eigen::MatrixXf  xi, const std::vector<Eigen::VectorXf>  means, const std::vector<float>  weights , const std::vector<Eigen::MatrixXf>  covariances)
   {
-    std::cout << "    *** Starting Regression ***    " << std::endl;
+    std::cout << "*** Starting Regression ***    " << std::endl;
     
     int numTrajsamples = 1;     // number of points in the chosen trajectory
     int i = 0;
@@ -341,22 +348,16 @@ class GMMNode
         xi_hat_s_k=mu_s_k+ sigma_st_k*inv_sigma_t_k*(xi_t -mu_t_k);
         sigma_hat_s_k=sigma_s_k -sigma_st_k*inv_sigma_t_k*sigma_ts_k;
 
-
         //equation 11
 
         X.resize(1,1);
         mean.resize(1,1);
         covariance.resize(1,1);
 
-
-
         X<<xi_t;
         mean<<mu_t_k;
 
         covariance<<sigma_t_k;
-
-
-
 
         beta_k=weights.at(k) * computeNormalDistributionPDF(X, mean,covariance);
         beta_k_sum=beta_k_sum+beta_k;
@@ -368,40 +369,61 @@ class GMMNode
       out_xi(0,coord)=beta_k_xi_hat_s_k_sum/beta_k_sum;
     }
     
-    pose.pose.position.x = out_xi(0,1); pose.pose.position.y = out_xi(0,2); pose.pose.position.z = out_xi(0,3);
+    // // Trying to move in the opposite direction if outside the GMM
+    // // if (out_xi(0,0) - out_xp(0,0) > 0.001)
+    // if (out_xi(0,0) > 0.456)
+    // {
+    //   Eigen::MatrixXf out_xd = out_xi - out_xp;
+    //   std::cout << "out_xd = " << std::endl << out_xd << std::endl;
 
+    //   pose.pose.position.x = out_xi(0,1)-out_xd(0,1); pose.pose.position.y = out_xi(0,2)-out_xd(0,2); pose.pose.position.z = out_xi(0,3)-out_xd(0,3);
+    //   std::cout << "out_xp(0,0) = " << out_xp(0,0) << std::endl;
+    // }
+    // //\ Trying to move in the opposite direction if outside the GMM  
+    
+    poseArr.push_back(out_xi(0,1));
 
-    // Publish the learned_trajectory on topic /gmm_node/gmm/learned_trajectory
-    pose.header.frame_id = "panda_link0";
-    learned_pose_pub.publish(pose);
+    // pose.pose.position.x = out_xi(0,1); pose.pose.position.y = out_xi(0,2); pose.pose.position.z = out_xi(0,3);
 
+    // // Publish the learned_trajectory on topic /gmm_node/gmm/learned_trajectory
+    // pose.header.frame_id = "panda_link0";
+    // learned_pose_pub.publish(pose);
+
+    // out_xp = out_xi;
     // debugfile.open("debug_regression.txt");
     // debugfile << out_xi(0,0);// << " " << out_xi(0,1) << " " << out_xi(0,2) << " " << out_xi(0,2) << "\n";
     // // debugfile.close();
     ros::Duration(0.2).sleep();
 
-    std::cout<< "-------------------------------------" <<std::endl;
-
-    std::cout<< "out_xi:" <<std::endl <<out_xi <<std::endl;
-
-
+    std::cout<< "out_xi:" << std::endl << out_xi <<std::endl;
     std::cout<< "out_xi.rows():"  <<out_xi.rows() <<std::endl;
     std::cout<< "out_xi.cols():"  <<out_xi.cols() <<std::endl;
-
+    std::cout<< "-------------------------------------" <<std::endl;
   }
 
   void poseRegressionCallback(const geometry_msgs::PoseStampedConstPtr& msg)
   {
-    pose_regress = sqrt(pow(msg->pose.position.x,2) + pow(msg->pose.position.y,2) + pow(msg->pose.position.z,2));
-    // std::cout << "pose_regress: " << pose_regress << std::endl;
-    // std::cout << "m_queue.size(): " << m_queue.size() << std::endl;
-    // std::cout << "covariances.size(): " << covariances.size() << std::endl;
-
-    if (pose_regress > 0.001 && data_recevied)
+    // pose_regress = sqrt(pow(msg->pose.position.x,2) + pow(msg->pose.position.y,2) + pow(msg->pose.position.z,2));
+    double msgArr[3] = {msg->pose.position.x, msg->pose.position.y, msg->pose.position.z};
+    double msgArrDist = sqrt(pow(msgArr[0],2) + pow(msgArr[1],2) + pow(msgArr[2],2));
+    char axis[3] = {'x', 'y', 'z'};
+    if (msgArrDist > 0.05 && data_received == 3)
     {
-      std::cout << "*** DOING Regression ***" << std::endl;
-      doRegression(eigendata,  means, weights , covariances);
+      for (int i = 0; i < 3; i++)
+      {
+        pose_regress = msgArr[i];
+        std::cout << "*** DOING Regression ***" << std::endl;
+        std::cout << " Regression Axis --> " << axis[i] << std::endl;
+        doRegression(Eigendata[i],  Means[i], Weights[i], Covariances[i]);
+        // data_received = false;
+      }
+      // std::cout << "poseArray = " << poseArr[0] << " " << poseArr[1] << " " << poseArr[2] << std::endl;
+      learned_deltaPose.header.frame_id = "panda_link0";
+      learned_deltaPose.pose.position.x = poseArr[0]*50; learned_deltaPose.pose.position.y = poseArr[1]*50; learned_deltaPose.pose.position.z = poseArr[2]*50;
+      learned_pose_pub.publish(learned_deltaPose);
+      poseArr.clear();
     }
+
   }
 
   private:
@@ -422,19 +444,28 @@ class GMMNode
   ros::Subscriber m_data_subscriber;
   ros::Publisher m_mix_publisher;
 
-  bool data_recevied = false;
+  int data_received = 0;
   Eigen::MatrixXf eigendata;
   std::vector<Eigen::VectorXf> means;
   std::vector<float> weights;
   std::vector<Eigen::MatrixXf> covariances;
-
+  // --- 
+  std::vector<Eigen::MatrixXf> Eigendata;
+  std::vector<std::vector<Eigen::VectorXf>> Means;
+  std::vector<std::vector<float>> Weights;
+  std::vector<std::vector<Eigen::MatrixXf>> Covariances;
+  // --
+  std::vector<double> poseArr;
+  geometry_msgs::PoseStamped learned_deltaPose;
+  // --
   ros::ServiceClient client;
   data_handle::DemonsInfo srv;
   ros::Publisher learned_posesArray_pub;
   ros::Publisher learned_pose_pub;
   ros::Subscriber pose_regression_sub;    // Receives the current pose of the robot to regress over each pose
-  float pose_regress;
-
+  double pose_regress;
+  Eigen::MatrixXf out_xp;
+  
   fstream debugfile;
 
   // this thread will simply wait for shutdown
