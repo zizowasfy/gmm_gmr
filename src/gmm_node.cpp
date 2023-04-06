@@ -253,6 +253,12 @@ class GMMNode
       m_mix_publisher.publish(mix_msg);
       ROS_INFO("gmm: message sent.");
       data_received++;
+      srv.request.read = false;
+      if (data_received == 1 && client.call(srv)) 
+      {
+        maxRange = srv.response.maxRange;
+        minRange = srv.response.minRange;
+      }
     }
   }
 
@@ -315,11 +321,11 @@ class GMMNode
     out_xi.resize(numTrajsamples, xi.cols());
     out_xi=Eigen::MatrixXf::Zero(numTrajsamples, xi.cols());
 
-    std::cout << "numTrajsamples:" << numTrajsamples << std::endl;
-    std::cout<< "xi:" <<std::endl << xi.size()/4 <<std::endl;
-    std::cout<< "means.size(): " << means.size() <<std::endl;
-    std::cout<< "covariances: " << covariances.size() <<std::endl;
-    std::cout<< "weights: " << weights.size() <<std::endl;
+    // std::cout << "numTrajsamples:" << numTrajsamples << std::endl;
+    // std::cout<< "xi:" <<std::endl << xi.size()/4 <<std::endl;
+    // std::cout<< "means.size(): " << means.size() <<std::endl;
+    // std::cout<< "covariances: " << covariances.size() <<std::endl;
+    // std::cout<< "weights: " << weights.size() <<std::endl;
 
 
 
@@ -393,7 +399,7 @@ class GMMNode
     // debugfile.open("debug_regression.txt");
     // debugfile << out_xi(0,0);// << " " << out_xi(0,1) << " " << out_xi(0,2) << " " << out_xi(0,2) << "\n";
     // // debugfile.close();
-    ros::Duration(0.2).sleep();
+    ros::Duration(0.1).sleep();
 
     std::cout<< "out_xi:" << std::endl << out_xi <<std::endl;
     std::cout<< "out_xi.rows():"  <<out_xi.rows() <<std::endl;
@@ -405,13 +411,31 @@ class GMMNode
   {
     // pose_regress = sqrt(pow(msg->pose.position.x,2) + pow(msg->pose.position.y,2) + pow(msg->pose.position.z,2));
     double msgArr[3] = {msg->pose.position.x, msg->pose.position.y, msg->pose.position.z};
-    double msgArrDist = sqrt(pow(msgArr[0],2) + pow(msgArr[1],2) + pow(msgArr[2],2));
+    double errmsgArr[3] = {0.5502645502645548 - msg->pose.position.x, -0.009326424870472083 - msg->pose.position.y, 0.08959276018099538 - msg->pose.position.z};
+    // double errmsgArr[3] = {0.7 - msg->pose.position.x, 0.4 - msg->pose.position.y, 0.4 - msg->pose.position.z};
+    double errmsgArrDist = sqrt(pow(errmsgArr[0],2) + pow(errmsgArr[1],2) + pow(errmsgArr[2],2));
     char axis[3] = {'x', 'y', 'z'};
-    if (msgArrDist > 0.05 && data_received == 3)
+    // if (errmsgArrDist > 0.05 && data_received == 3)
+    if (data_received == 3)
     {
       for (int i = 0; i < 3; i++)
       {
-        pose_regress = msgArr[i];
+        if (abs(errmsgArr[i]) < 0.01) 
+        {
+          poseArr[i] = 0.0;
+          ROS_INFO(" $$$$$$$$$$$$$$$ Axis '%c' reached the GOAL Position", axis[i]);
+          continue;
+        }
+        if (msgArr[i] > maxRange[i])
+        {
+          // std::cout << maxRange[i] << std::endl;
+          ROS_ERROR(" Axis '%c' is OUT of the MAX Range. %f | %f ", axis[i],msgArr[i],maxRange[i]);
+        }
+        if (msgArr[i] < minRange[i])
+        {
+          ROS_ERROR(" Axis '%c' is OUT of the MIN Range. %f | %f ", axis[i],msgArr[i],minRange[i]);
+        }
+        pose_regress = errmsgArr[i];
         std::cout << "*** DOING Regression ***" << std::endl;
         std::cout << " Regression Axis --> " << axis[i] << std::endl;
         doRegression(Eigendata[i],  Means[i], Weights[i], Covariances[i]);
@@ -455,7 +479,7 @@ class GMMNode
   std::vector<std::vector<float>> Weights;
   std::vector<std::vector<Eigen::MatrixXf>> Covariances;
   // --
-  std::vector<double> poseArr;
+  std::vector<double> poseArr = {0,0,0};
   geometry_msgs::PoseStamped learned_deltaPose;
   // --
   ros::ServiceClient client;
@@ -465,7 +489,8 @@ class GMMNode
   ros::Subscriber pose_regression_sub;    // Receives the current pose of the robot to regress over each pose
   double pose_regress;
   Eigen::MatrixXf out_xp;
-  
+  std::vector<float> minRange, maxRange;
+
   fstream debugfile;
 
   // this thread will simply wait for shutdown

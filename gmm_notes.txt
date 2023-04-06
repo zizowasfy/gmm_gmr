@@ -6,3 +6,11 @@ in the opposite direction, it just regresses outside the gaussians of the GMM)
 
 ** Sample over each axis (xyz) separately 
 
+TODO:
+- Clean the code
+- Display info about the learned GMM/trajectory (in a topic and/or service)
+- Visualize the GMM in RViz
+- Visualize the learned trajectory in RViz
+- Save the learned trajectory
+- Save the GMM in a file
+- 
