@@ -13,4 +13,35 @@ TODO:
 - Visualize the learned trajectory in RViz
 - Save the learned trajectory
 - Save the GMM in a file
+- Record data and a video for each modelling trial I did for documentation
+  - targetPoseError (Euclidean distance) vs absolute pose (1 GMM)
+  - targetPoseError vs delta pose for each axis (3 GMMs)
+  - targetPoseError vs absolute pose for each axis (3 GMMs)
+  - targetPoseError (Euclidean distance) vs delta pose (1 GMM) (Not yet implemented)
+
+ToTry:
+- Visualize the learned Poses (deltas)
+- Learn each axis separately with zeroing the others to debug
+- Increase the number of gaussians
+- Try taking the 3 decimal points of the numbers instead of the whole decimal points
+- Stretch out the delta values (in the y -axis) because the differences are too small.
+So try to multiply the values by 2 (or more).
+- Train with absolute poses without the deltas (velocities) to see if the problem is 
+with the deltas or the problem is with learning separate GMMs.
+- Regress over the delta poses of the longest/shortest demon instead of the actual 
+current pose of the robot.
+- TOMORROW (14/04) visualize the data for regressing over delta poses. 
 - 
+
+
+Problems:
+- In regression, if the point is outside the GMM, the GMR fails to converge.
+- 
+
+Possible Solutions:
+- Modfiy the mean position of the learned gaussians according to the new 
+starting/ending pose.
+
+Bugs found:
+- the queues size on the published topics (/gmm/learned_pose), and the delay in doReregression()
+- possArr in gmm_node was being defined with push_back() which is wrong.

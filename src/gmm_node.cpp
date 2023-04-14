@@ -99,11 +99,11 @@ class GMMNode
 
     // learned_posesArray_pub = m_nh.advertise<geometry_msgs::PoseArray>("/gmm/learned_trajectory",1000);
 
-    learned_pose_pub = m_nh.advertise<geometry_msgs::PoseStamped>("/gmm/learned_pose", 100);
+    learned_pose_pub = m_nh.advertise<geometry_msgs::PoseStamped>("/gmm/learned_pose", 20);
 
-    pose_regression_sub = m_nh.subscribe("/robot_ee_cartesianpose", 100, &GMMNode::poseRegressionCallback, this);
+    pose_regression_sub = m_nh.subscribe("/robot_ee_cartesianpose", 20, &GMMNode::poseRegressionCallback, this);
 
-    out_xp.resize(1, 4); out_xp(0,0) = 100000;
+    // out_xp.resize(1, 4); out_xp(0,0) = 100000;
   }
 
   class TerminationHandler: public GMMExpectationMaximization::ITerminationHandler
@@ -298,7 +298,7 @@ class GMMNode
       return  (nominator/denominator);
   }
   
-  void doRegression(Eigen::MatrixXf  xi, const std::vector<Eigen::VectorXf>  means, const std::vector<float>  weights , const std::vector<Eigen::MatrixXf>  covariances)
+  void doRegression(Eigen::MatrixXf  xi, const std::vector<Eigen::VectorXf>  means, const std::vector<float>  weights , const std::vector<Eigen::MatrixXf>  covariances, int axis)
   {
     std::cout << "*** Starting Regression ***    " << std::endl;
     
@@ -387,7 +387,7 @@ class GMMNode
     // }
     // //\ Trying to move in the opposite direction if outside the GMM  
     
-    poseArr.push_back(out_xi(0,1));
+    poseArr[axis] = out_xi(0,1);
 
     // pose.pose.position.x = out_xi(0,1); pose.pose.position.y = out_xi(0,2); pose.pose.position.z = out_xi(0,3);
 
@@ -418,12 +418,14 @@ class GMMNode
     // if (errmsgArrDist > 0.05 && data_received == 3)
     if (data_received == 3)
     {
+      // poseArr = {msgArr[0], msgArr[1], msgArr[2]}; // use when learning absolute poses
       for (int i = 0; i < 3; i++)
       {
         if (abs(errmsgArr[i]) < 0.01) 
         {
-          poseArr[i] = 0.0;
           ROS_INFO(" $$$$$$$$$$$$$$$ Axis '%c' reached the GOAL Position", axis[i]);
+          poseArr[i] = msgArr[i]; // use when learning absolute poses
+          // poseArr[i] = 0.0; // use when learning delta poses
           continue;
         }
         if (msgArr[i] > maxRange[i])
@@ -438,12 +440,14 @@ class GMMNode
         pose_regress = errmsgArr[i];
         std::cout << "*** DOING Regression ***" << std::endl;
         std::cout << " Regression Axis --> " << axis[i] << std::endl;
-        doRegression(Eigendata[i],  Means[i], Weights[i], Covariances[i]);
+        doRegression(Eigendata[i],  Means[i], Weights[i], Covariances[i], i);
         // data_received = false;
       }
       // std::cout << "poseArray = " << poseArr[0] << " " << poseArr[1] << " " << poseArr[2] << std::endl;
       learned_deltaPose.header.frame_id = "panda_link0";
-      learned_deltaPose.pose.position.x = poseArr[0]*50; learned_deltaPose.pose.position.y = poseArr[1]*50; learned_deltaPose.pose.position.z = poseArr[2]*50;
+      learned_deltaPose.pose.position.x = poseArr[0] + errmsgArr[0]*0.1; // use when learning absolute poses
+      learned_deltaPose.pose.position.y = poseArr[1] + errmsgArr[1]*0.1;
+      learned_deltaPose.pose.position.z = poseArr[2] + errmsgArr[2]*0.1;
       learned_pose_pub.publish(learned_deltaPose);
       poseArr.clear();
     }
@@ -479,7 +483,7 @@ class GMMNode
   std::vector<std::vector<float>> Weights;
   std::vector<std::vector<Eigen::MatrixXf>> Covariances;
   // --
-  std::vector<double> poseArr = {0,0,0};
+  std::vector<double> poseArr = {0.0, 0.0, 0.0};
   geometry_msgs::PoseStamped learned_deltaPose;
   // --
   ros::ServiceClient client;
