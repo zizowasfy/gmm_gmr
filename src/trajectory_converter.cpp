@@ -109,7 +109,7 @@ class FormatString
     return m_is_valid;
   }
 
-  std::vector<float> format(const geometry_msgs::PoseArray & poses,uint index, std::string axis) const
+  std::vector<float> format(const geometry_msgs::PoseArray & poses,uint index) const
   {
     std::vector<float> result;
     result.reserve(m_pars.size());
@@ -118,39 +118,24 @@ class FormatString
     uint ip = index < (poses.poses.size() - 1) ? index + 1 : index;
     uint im = index > 0 ? index - 1 : index;
 
-    // for (uint i = 0; i < m_pars.size(); i++)
-    // {
-      // if (m_pars[i] == FORMAT_INDEX)
-      //   // result.push_back(float(index));
-      //   result.push_back(poses.poses[index].orientation.w);
-      // else if (m_pars[i] == FORMAT_X)
-      //   result.push_back(poses.poses[index].position.x);
-      // else if (m_pars[i] == FORMAT_Y)
-      //   result.push_back(poses.poses[index].position.y);
-      // else if (m_pars[i] == FORMAT_Z)
-      //   result.push_back(poses.poses[index].position.z);
-      // else if (m_pars[i] == FORMAT_DX)
-      //   result.push_back(poses.poses[ip].position.x - poses.poses[im].position.x);
-      // else if (m_pars[i] == FORMAT_DY)
-      //   result.push_back(poses.poses[ip].position.y - poses.poses[im].position.y);
-      // else if (m_pars[i] == FORMAT_DZ)
-      //   result.push_back(poses.poses[ip].position.z - poses.poses[im].position.z);
-      if (axis == FORMAT_DX)
-      {
-        result.push_back(poses.poses[index].orientation.x);
+    for (uint i = 0; i < m_pars.size(); i++)
+    {
+      if (m_pars[i] == FORMAT_INDEX)
+        // result.push_back(float(index));
+        result.push_back(poses.poses[index].orientation.w);
+      else if (m_pars[i] == FORMAT_X)
         result.push_back(poses.poses[index].position.x);
-      }
-      else if (axis == FORMAT_DY)
-      {
-        result.push_back(poses.poses[index].orientation.y);
+      else if (m_pars[i] == FORMAT_Y)
         result.push_back(poses.poses[index].position.y);
-      }
-      else if (axis == FORMAT_DZ)
-      {
-        result.push_back(poses.poses[index].orientation.z);
+      else if (m_pars[i] == FORMAT_Z)
         result.push_back(poses.poses[index].position.z);
-      }
-    // }
+      else if (m_pars[i] == FORMAT_DX)
+        result.push_back(poses.poses[ip].position.x - poses.poses[im].position.x);
+      else if (m_pars[i] == FORMAT_DY)
+        result.push_back(poses.poses[ip].position.y - poses.poses[im].position.y);
+      else if (m_pars[i] == FORMAT_DZ)
+        result.push_back(poses.poses[ip].position.z - poses.poses[im].position.z);
+    }
 
     // std::cout << "result: " << result[0] << " " << result[1] << " " << result[2] << " " << result[3] << " " << std::endl;
     // ros::Duration(0.1).sleep();
@@ -197,22 +182,16 @@ class TrajectoryConverter
     out->layout.dim[0].size = poses.poses.size();
 
     out->data.resize(poses.poses.size() * ndim);
-
-    std::string deltas[3] = {FORMAT_DX, FORMAT_DY, FORMAT_DZ};
-    for (std::string axis : deltas)     // loop over each axis (delta x,y, and z)
+    for (uint i = 0; i < poses.poses.size(); i++)
     {
-      for (uint i = 0; i < poses.poses.size(); i++)
+      std::vector<float> pars = m_format_string->format(poses,i);
+      for (uint h = 0; h < ndim; h++)
       {
-        std::vector<float> pars = m_format_string->format(poses,i,axis);
-        for (uint h = 0; h < ndim; h++)
-        {
-          out->data[i * ndim + h] = pars[h];
-        }
+        out->data[i * ndim + h] = pars[h];
       }
-      m_output.publish(out);
-      ros::Duration(0.1).sleep();
     }
 
+    m_output.publish(out);
   }
 
   private:
