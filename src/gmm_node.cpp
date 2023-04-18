@@ -99,9 +99,11 @@ class GMMNode
 
     // learned_posesArray_pub = m_nh.advertise<geometry_msgs::PoseArray>("/gmm/learned_trajectory",1000);
 
-    learned_pose_pub = m_nh.advertise<geometry_msgs::PoseStamped>("/gmm/learned_pose", 20);
+    learned_pose_pub = m_nh.advertise<geometry_msgs::PoseStamped>("/gmm/learned_pose", 1);
 
-    pose_regression_sub = m_nh.subscribe("/robot_ee_cartesianpose", 100, &GMMNode::poseRegressionCallback, this);
+    pose_regression_sub = m_nh.subscribe("/robot_ee_cartesianpose", 1, &GMMNode::poseRegressionCallback, this);
+
+    m_nh.getParam("/subtask_param", subtask_param);
   }
 
   class TerminationHandler: public GMMExpectationMaximization::ITerminationHandler
@@ -285,7 +287,7 @@ class GMMNode
       return  (nominator/denominator);
   }
   
-  void doRegression(Eigen::MatrixXf  xi, const std::vector<Eigen::VectorXf>  means, const std::vector<float>  weights , const std::vector<Eigen::MatrixXf>  covariances, int axis)
+  void doRegression(Eigen::MatrixXf  xi, const std::vector<Eigen::VectorXf>  means, const std::vector<float>  weights , const std::vector<Eigen::MatrixXf>  covariances)
   {
     std::cout << "    *** Starting Regression ***    " << std::endl;
     
@@ -293,7 +295,7 @@ class GMMNode
     int i = 0;
     std::string trajDir;
     geometry_msgs::PoseArray learned_posesArray;
-    geometry_msgs::PoseStamped pose;
+    // geometry_msgs::PoseStamped pose;
     rosbag::Bag rbag, wbag;
 
     Eigen::VectorXf X;
@@ -368,17 +370,17 @@ class GMMNode
       out_xi(0,coord)=beta_k_xi_hat_s_k_sum/beta_k_sum;
     }
     
-    pose.pose.position.x = out_xi(0,1); pose.pose.position.y = out_xi(0,2); pose.pose.position.z = out_xi(0,3);
+    learned_pose.pose.position.x = out_xi(0,1); learned_pose.pose.position.y = out_xi(0,2); learned_pose.pose.position.z = out_xi(0,3);
 
 
     // Publish the learned_trajectory on topic /gmm_node/gmm/learned_trajectory
-    pose.header.frame_id = "panda_link0";
-    learned_pose_pub.publish(pose);
+    learned_pose.header.frame_id = "panda_link0";
+    learned_pose_pub.publish(learned_pose);
 
     // debugfile.open("debug_regression.txt");
     // debugfile << out_xi(0,0);// << " " << out_xi(0,1) << " " << out_xi(0,2) << " " << out_xi(0,2) << "\n";
     // // debugfile.close();
-    ros::Duration(0.1).sleep();
+    ros::Duration(0.01).sleep();
 
     std::cout<< "-------------------------------------" <<std::endl;
 
@@ -392,15 +394,35 @@ class GMMNode
 
   void poseRegressionCallback(const geometry_msgs::PoseStampedConstPtr& msg)
   {
-    pose_regress = sqrt(pow(msg->pose.position.x,2) + pow(msg->pose.position.y,2) + pow(msg->pose.position.z,2));
-    // std::cout << "pose_regress: " << pose_regress << std::endl;
-    // std::cout << "m_queue.size(): " << m_queue.size() << std::endl;
-    // std::cout << "covariances.size(): " << covariances.size() << std::endl;
-
-    if (pose_regress > 0.001 && data_recevied)
+    if (data_recevied)
     {
-      std::cout << "*** DOING Regression ***" << std::endl;
-      doRegression(eigendata,  means, weights , covariances);
+      // double msgArr[3] = {msg->pose.position.x, msg->pose.position.y, msg->pose.position.z};
+      if (subtask_param == "action")
+      {
+        pose_regress = sqrt(pow(0.5502645502645548 - msg->pose.position.x,2) + pow(-0.009326424870472083 - msg->pose.position.y,2) + pow(0.08959276018099538 - msg->pose.position.z,2));
+      }
+      else if (subtask_param == "place")
+      {
+        pose_regress = sqrt(pow(0.7 - msg->pose.position.x,2) + pow(0.4 - msg->pose.position.y,2) + pow(0.4 - msg->pose.position.z,2));
+      }
+      
+      std::cout << "pose_regress: " << pose_regress << std::endl;
+      // std::cout << "m_queue.size(): " << m_queue.size() << std::endl;
+      // std::cout << "covariances.size(): " << covariances.size() << std::endl;
+
+      if (pose_regress > 0.03)
+      {
+        std::cout << "*** DOING Regression ***" << std::endl;
+        doRegression(eigendata,  means, weights , covariances);
+      }
+      else
+      {
+        learned_pose.pose.position.x = 0.0;
+        learned_pose.pose.position.y = 0.0;
+        learned_pose.pose.position.z = 0.0;
+        learned_pose_pub.publish(learned_pose);
+        ROS_INFO(" $$$$$$$$$$$$$$$ Reached the GOAL Position");
+      }      
     }
   }
 
@@ -434,6 +456,8 @@ class GMMNode
   ros::Publisher learned_pose_pub;
   ros::Subscriber pose_regression_sub;    // Receives the current pose of the robot to regress over each pose
   float pose_regress;
+  geometry_msgs::PoseStamped learned_pose;
+  std::string subtask_param;
 
   fstream debugfile;
 

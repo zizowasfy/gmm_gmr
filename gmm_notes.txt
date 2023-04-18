@@ -14,10 +14,19 @@ TODO:
 - Save the learned trajectory
 - Save the GMM in a file
 - Record data and a video for each modelling trial I did for documentation
-  - targetPoseError (Euclidean distance) vs absolute pose (1 GMM)
-  - targetPoseError vs delta pose for each axis (3 GMMs)
-  - targetPoseError vs absolute pose for each axis (3 GMMs)
-  - targetPoseError (Euclidean distance) vs delta pose (1 GMM) (Not yet implemented)
+  1- targetPoseError vs delta pose for each axis (3 GMMs)
+    - it goes to the target pose, it doesn't follow the trajectory because the 
+      3 axis were de-coupled.
+  2- targetPoseError vs absolute pose for each axis (3 GMMs)
+    - Similar to delta poses; the behaviour is linear, i.e. it behaves as a normal 
+      position controller. This probably explains why it is slow and even works if given
+      pose outside the GMM, unlike the delta pose where it fails to converge when given
+      a pose outside the GMM.
+  3- targetPoseError (Euclidean distance) vs absolute pose (1 GMM) (To be recorded)
+    - Works perfect. It can return back inside the GMM if robot is externally pushed away
+      from the path while executing the learned trajectory, UNLESS pose is given outside the GMM  
+  4- targetPoseError (Euclidean distance) vs delta pose (1 GMM) (Not yet implemented)
+    
 
 ToTry:
 - Visualize the learned Poses (deltas)
@@ -45,3 +54,14 @@ starting/ending pose.
 Bugs found:
 - the queues size on the published topics (/gmm/learned_pose), and the delay in doReregression()
 - possArr in gmm_node was being defined with push_back() which is wrong.
+
+
+New Idea to utilize strategy 3 and 4 in order to generalize the trajectory learning 
+to work with different starting and target poses:
+  First collect delta poses of each demon and record them as delta demons. These delta
+  demons are delta pose vs poseError. Generate, from these delta demons, absolute demons.
+  This generated absolute demons can be utilized in two ways (ideas):
+  - they can be used only for the purpose of visualizing the GMM in RViz. The GMM will
+    be trained on delta poses vs poseError.
+  - they can be used for training the GMM (absolute poses vs poseError). 
+  

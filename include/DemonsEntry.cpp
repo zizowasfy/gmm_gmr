@@ -20,6 +20,8 @@ private:
   ros::Publisher poseArray_pub;
   ros::Publisher poseArrayViz_pub;
   ros::Publisher poseViz_pub;
+  ros::Publisher poseVizAction_pub;
+  ros::Publisher poseVizPlace_pub;
 
   rosbag::Bag rbag, wbag;
 
@@ -43,6 +45,8 @@ public:
     poseArray_pub = n.advertise<geometry_msgs::PoseArray>("/gmm/traj_input", 10);
     poseArrayViz_pub = n.advertise<geometry_msgs::PoseArray>("/traj_input_viz", 10);
     poseViz_pub = n.advertise<geometry_msgs::PoseStamped>("/pose_viz", 10);
+    poseVizAction_pub = n.advertise<geometry_msgs::PoseStamped>("/pose_viz_action", 10);
+    poseVizPlace_pub = n.advertise<geometry_msgs::PoseStamped>("/pose_viz_place", 10);
 
     // readDemons();
   }
@@ -150,7 +154,7 @@ public:
   {
     std::vector<float> minError = {1000, 1000, 1000}; std::vector<float> maxError = {0, 0, 0}; 
     geometry_msgs::PoseStamped pose;
-    geometry_msgs::PoseStamped poseViz;
+    geometry_msgs::PoseStamped poseViz, poseVizAction, poseVizPlace;
     geometry_msgs::PoseArray poseArray;
     geometry_msgs::PoseArray poseArrayViz;
 
@@ -168,14 +172,14 @@ public:
         franka_msgs::FrankaState::ConstPtr mp = m.instantiate<franka_msgs::FrankaState>();
         if (mp != nullptr)
         {
-          // use when learning absolute poses
-          pose.pose.position.x = msg_count == 0 ? 0 : (mp->O_T_EE[12]) * 1;
-          pose.pose.position.y = msg_count == 0 ? 0 : (mp->O_T_EE[13]) * 1;
-          pose.pose.position.z = msg_count == 0 ? 0 : (mp->O_T_EE[14]) * 1;
+          // // use when learning absolute poses
+          // pose.pose.position.x = msg_count == 0 ? 0 : (mp->O_T_EE[12]) * 1;
+          // pose.pose.position.y = msg_count == 0 ? 0 : (mp->O_T_EE[13]) * 1;
+          // pose.pose.position.z = msg_count == 0 ? 0 : (mp->O_T_EE[14]) * 1;
           // use when learning delta poses          
-          // pose.pose.position.x = msg_count == 0 ? 0 : (mp->O_T_EE[12] - prev_pose.position.x) * 1;
-          // pose.pose.position.y = msg_count == 0 ? 0 : (mp->O_T_EE[13] - prev_pose.position.y) * 1;
-          // pose.pose.position.z = msg_count == 0 ? 0 : (mp->O_T_EE[14] - prev_pose.position.z) * 1;
+          pose.pose.position.x = msg_count == 0 ? 0 : (mp->O_T_EE[12] - prev_pose.position.x) * 1;
+          pose.pose.position.y = msg_count == 0 ? 0 : (mp->O_T_EE[13] - prev_pose.position.y) * 1;
+          pose.pose.position.z = msg_count == 0 ? 0 : (mp->O_T_EE[14] - prev_pose.position.z) * 1;
 
           // Sample over (the x-axis) 
           pose.pose.orientation.w = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2)); // euclidean distance of the delta position
@@ -225,8 +229,20 @@ public:
     ROS_INFO_STREAM("posesArray size: " << poseArray.poses.size());
     poseArray_pub.publish(poseArray);
     poseArrayViz_pub.publish(poseArrayViz);
-    // poseViz.header.frame_id = "panda_link0";
-    // poseViz_pub.publish(poseViz);
+
+    // Display in Rviz the target pose of the Action and Place tasks for better debugging/vizualizing
+    poseVizAction.header.frame_id = "panda_link0";
+    poseVizAction.pose.position.x = 0.5502645502645548;
+    poseVizAction.pose.position.y = -0.009326424870472083;
+    poseVizAction.pose.position.z = 0.08959276018099538;
+    poseVizAction_pub.publish(poseVizAction);
+
+    poseVizPlace.header.frame_id = "panda_link0";
+    poseVizPlace.pose.position.x = 0.7;
+    poseVizPlace.pose.position.y = 0.4;
+    poseVizPlace.pose.position.z = 0.4;
+    poseVizPlace_pub.publish(poseVizPlace);
+    //\ Display in Rviz the target pose of the Action and Place tasks for better debugging/vizualizing    
     demonsinfo.minRange = minError;
     demonsinfo.maxRange = maxError;
   }
