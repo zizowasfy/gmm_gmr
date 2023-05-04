@@ -25,8 +25,15 @@ TODO:
   3- targetPoseError (Euclidean distance) vs absolute pose (1 GMM) (To be recorded)
     - Works perfect. It can return back inside the GMM if robot is externally pushed away
       from the path while executing the learned trajectory, UNLESS pose is given outside the GMM  
-  4- targetPoseError (Euclidean distance) vs delta pose (1 GMM) (Not yet implemented)
-    
+  4- targetPoseError (Euclidean distance) vs delta pose (1 GMM) (DONE)
+
+- Compare taking the gmm_learned_trajectory from moving the robot in simulation vs calculating
+the points of the trajectory. [Can add an if condition in the launch file to switch between
+simulation and real]
+- Add actionlib to have the option to move the robot (in simulation or in real) with the
+learned_trajectory.
+- Save the GMM model of each task (in a file).
+- Save the gmm_learned_trajectory (DONE)
 
 ToTry:
 - Visualize the learned Poses (deltas)
