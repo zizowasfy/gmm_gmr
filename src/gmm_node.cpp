@@ -417,7 +417,7 @@ class GMMNode
         learned_pose.header.frame_id = "panda_link0";
         learned_pose_pub.publish(learned_pose);
         learned_posesArray.poses.push_back(addPoses(learned_pose.pose, msg->pose));
-        ros::Duration(0.01).sleep();
+        ros::Rate(200).sleep();   // Still not sure what freq we collected the demons in!!
       }
       else
       {
@@ -435,11 +435,19 @@ class GMMNode
 
   void saveLearnedTraj(const geometry_msgs::PoseArrayConstPtr& msg)
   {
-    rosbag::Bag wbag;
-    wbag.open(llDir + "LL/" + task_param + "/gmm-gmr/gmr_learned_" + subtask_param + "testt.bag", rosbag::bagmode::Write);
-    
-    wbag.write("/gmm/learned_trajectory", ros::Time::now(), msg);
-    wbag.close();
+    char save;
+    std::cout << "\nDo you want to save this gmr_learned_trajectory? (y/n) "; std::cin >> save; std::cout << " " << std::endl;
+    if (save == 'y')
+    {
+      std::cout << "Saving ... !" << std::endl;
+      rosbag::Bag wbag;
+      wbag.open(llDir + "LL/" + task_param + "/gmm-gmr/gmr_learned_" + subtask_param + "testt.bag", rosbag::bagmode::Write);
+      
+      wbag.write("/gmm/learned_trajectory", ros::Time::now(), msg);
+      wbag.close();
+      std::cout << "... Saved !" << std::endl;
+    }
+
   }
 
   geometry_msgs::Pose addPoses(geometry_msgs::Pose p1, geometry_msgs::Pose p2)

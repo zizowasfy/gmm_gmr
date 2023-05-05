@@ -27,13 +27,16 @@ TODO:
       from the path while executing the learned trajectory, UNLESS pose is given outside the GMM  
   4- targetPoseError (Euclidean distance) vs delta pose (1 GMM) (DONE)
 
+___________ After DMP
+
 - Compare taking the gmm_learned_trajectory from moving the robot in simulation vs calculating
 the points of the trajectory. [Can add an if condition in the launch file to switch between
 simulation and real]
 - Add actionlib to have the option to move the robot (in simulation or in real) with the
-learned_trajectory.
-- Save the GMM model of each task (in a file).
+learned_trajectory. (DONE but not entirely!!)
+- Save the GMM model of each task (in a file). (will record /gmm_mix topic)
 - Save the gmm_learned_trajectory (DONE)
+- Add orientation
 
 ToTry:
 - Visualize the learned Poses (deltas)
@@ -47,7 +50,10 @@ with the deltas or the problem is with learning separate GMMs.
 - Regress over the delta poses of the longest/shortest demon instead of the actual 
 current pose of the robot.
 - TOMORROW (14/04) visualize the data for regressing over delta poses. 
-- 
+
+___________ After DMP
+- test the DMP with one demonsatration, without using GMM-GMR.
+- test with moving with learned_traj in different speeds (sending rates (hz))
 
 
 Problems:
