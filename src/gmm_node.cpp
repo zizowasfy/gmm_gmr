@@ -95,7 +95,7 @@ class GMMNode
     m_nh.param<std::string>(PARAM_NAME_MIX_OUTPUT_TOPIC,temp_string,PARAM_DEFAULT_MIX_OUTPUT_TOPIC);
     m_mix_publisher = m_nh.advertise<gaussian_mixture_model::GaussianMixture>(temp_string,2);
 
-    client = m_nh.serviceClient<data_handle::DemonsInfo>("/DemonsInfo_Service");
+    demonsInfo_client = m_nh.serviceClient<data_handle::DemonsInfo>("/DemonsInfo_Service");
 
     learned_posesArray_pub = m_nh.advertise<geometry_msgs::PoseArray>("/gmm/learned_trajectory",10);
 
@@ -251,7 +251,8 @@ class GMMNode
 
       m_mix_publisher.publish(mix_msg);
       ROS_INFO("gmm: message sent.");
-      data_recevied = true;
+      // data_recevied = true;
+      trajRegressionCallback();
     }
   }
 
@@ -414,7 +415,7 @@ class GMMNode
         std::cout << "*** DOING Regression ***" << std::endl;
         doRegression(eigendata,  means, weights , covariances);
         //Publish the learned_trajectory on topic /gmm/learned_trajectory to move robot
-        learned_pose.header.frame_id = "panda_link0";
+        learned_pose.header.frame_id = "delta";
         learned_pose_pub.publish(learned_pose);
         learned_posesArray.poses.push_back(addPoses(learned_pose.pose, msg->pose));
         ros::Rate(200).sleep();   // Still not sure what freq we collected the demons in!!
@@ -433,6 +434,51 @@ class GMMNode
     }
   }
 
+  void trajRegressionCallback()
+  {
+    geometry_msgs::Pose regress_pose; 
+    data_handle::DemonsInfo srv;
+    srv.request.send = false;
+    if (demonsInfo_client.call(srv))
+    {
+      rosbag::Bag rbag;
+      // Regress over the poseError samples of the longest Demon
+      rbag.open(demonsDir + task_param + "/" + subtask_param + "/Franka_Stage2_" + task_param + "_" + subtask_param + "_" + srv.response.names[srv.response.longest_idx] + ".bag");
+      int i = 0;
+      for(rosbag::MessageInstance const m: rosbag::View(rbag))
+      {
+        franka_msgs::FrankaState::ConstPtr mp = m.instantiate<franka_msgs::FrankaState>();   
+
+        pose_regress = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2)); // euclidean distance of the delta position;
+        if (mp != nullptr && pose_regress > 0.03)
+        {
+          // Set the starting pose to be the first pose of the longest Demon
+          if (i == 0)
+          {
+            regress_pose.position.x = mp->O_T_EE[12];
+            regress_pose.position.y = mp->O_T_EE[13];
+            regress_pose.position.z = mp->O_T_EE[14];
+          }
+          
+          std::cout << "*** DOING Regression ***" << std::endl;
+          doRegression(eigendata,  means, weights , covariances);
+
+          //Publish the learned_trajectory on topic /gmm/learned_trajectory to move robot
+          regress_pose = addPoses(learned_pose.pose, regress_pose);
+          learned_posesArray.poses.push_back(regress_pose);
+          // ros::Duration(0.001).sleep();
+          i++;
+        }        
+      }
+      ROS_INFO_STREAM("Number of Regression Samples: " << i);
+      learned_posesArray.header.frame_id = "panda_link0";
+      learned_posesArray_pub.publish(learned_posesArray);
+      ROS_INFO("$$$$$$$$$$$$$$$ GMM-GMR Learned Trajectory is Published!");
+      rbag.close();
+    }
+  }
+
+
   void saveLearnedTraj(const geometry_msgs::PoseArrayConstPtr& msg)
   {
     char save;
@@ -441,7 +487,7 @@ class GMMNode
     {
       std::cout << "Saving ... !" << std::endl;
       rosbag::Bag wbag;
-      wbag.open(llDir + "LL/" + task_param + "/gmm-gmr/gmr_learned_" + subtask_param + "testt.bag", rosbag::bagmode::Write);
+      wbag.open(llDir + task_param + "/gmm-gmr/gmr_learned_" + subtask_param + "testt.bag", rosbag::bagmode::Write);
       
       wbag.write("/gmm/learned_trajectory", ros::Time::now(), msg);
       wbag.close();
@@ -484,7 +530,7 @@ class GMMNode
   std::vector<float> weights;
   std::vector<Eigen::MatrixXf> covariances;
 
-  ros::ServiceClient client;
+  ros::ServiceClient demonsInfo_client;
   data_handle::DemonsInfo srv;
   ros::Publisher learned_posesArray_pub;
   ros::Subscriber learned_posesArray_sub;
@@ -495,7 +541,8 @@ class GMMNode
   geometry_msgs::PoseArray learned_posesArray;
   std::string task_param, subtask_param;
 
-  std::string llDir = "/home/zizo/Disassembly Teleop/";
+  std::string demonsDir = "/home/zizo/Disassembly Teleop/Demons/";
+  std::string llDir = "/home/zizo/Disassembly Teleop/LL/";
   // this thread will simply wait for shutdown
   // and unlock all the conditions variables
   boost::thread m_shutting_down_thread;
