@@ -68,13 +68,21 @@ Bugs found:
 - the queues size on the published topics (/gmm/learned_pose), and the delay in doReregression()
 - possArr in gmm_node was being defined with push_back() which is wrong.
 
+Ideas:
 
-New Idea to utilize strategy 3 and 4 in order to generalize the trajectory learning 
-to work with different starting and target poses:
-  First collect delta poses of each demon and record them as delta demons. These delta
-  demons are delta pose vs poseError. Generate, from these delta demons, absolute demons.
-  This generated absolute demons can be utilized in two ways (ideas):
-  - they can be used only for the purpose of visualizing the GMM in RViz. The GMM will
-    be trained on delta poses vs poseError.
-  - they can be used for training the GMM (absolute poses vs poseError). 
-  
+  New Idea to utilize strategy 3 and 4 in order to generalize the trajectory learning 
+  to work with different starting and target poses:
+    First collect delta poses of each demon and record them as delta demons. These delta
+    demons are delta pose vs poseError. Generate, from these delta demons, absolute demons.
+    This generated absolute demons can be utilized in two ways (ideas):
+    - they can be used only for the purpose of visualizing the GMM in RViz. The GMM will
+      be trained on delta poses vs poseError.
+    - they can be used for training the GMM (absolute poses vs poseError). 
+    
+  What if the Cosine Similarity distance is used instead of the Euclidean distance?!!
+  - still won't work with absolute poses.
+
+  Regress for delta pose over time samples
+  - The delta pose for each Demon will be extracted and then used to make new Demons
+  - After that, DTW can be used (or not!)
+  - 

@@ -418,7 +418,7 @@ class GMMNode
         learned_pose.header.frame_id = "delta";
         learned_pose_pub.publish(learned_pose);
         learned_posesArray.poses.push_back(addPoses(learned_pose.pose, msg->pose));
-        ros::Rate(200).sleep();   // Still not sure what freq we collected the demons in!!
+        ros::Rate(100).sleep();   // Still not sure what freq we collected the demons in!!
       }
       else
       {
@@ -443,14 +443,16 @@ class GMMNode
     {
       rosbag::Bag rbag;
       // Regress over the poseError samples of the longest Demon
-      rbag.open(demonsDir + task_param + "/" + subtask_param + "/Franka_Stage2_" + task_param + "_" + subtask_param + "_" + srv.response.names[srv.response.longest_idx] + ".bag");
+      rbag.open(demonsDir + task_param + "/" + subtask_param + "/Franka_Stage2_" + task_param + "_" + subtask_param + "_" + srv.response.names[srv.response.shortest_idx] + ".bag");
       int i = 0;
       for(rosbag::MessageInstance const m: rosbag::View(rbag))
       {
         franka_msgs::FrankaState::ConstPtr mp = m.instantiate<franka_msgs::FrankaState>();   
 
+        // pose_regress = mp->O_T_EE_c[15];   // attempt to train over time samples instead of poseError    
         pose_regress = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2)); // euclidean distance of the delta position;
-        if (mp != nullptr && pose_regress > 0.03)
+        std::cout << "pose_regress = " << pose_regress << std::endl;
+        if (mp != nullptr) // && pose_regress > 0.03)
         {
           // Set the starting pose to be the first pose of the longest Demon
           if (i == 0)
@@ -466,7 +468,7 @@ class GMMNode
           //Publish the learned_trajectory on topic /gmm/learned_trajectory to move robot
           regress_pose = addPoses(learned_pose.pose, regress_pose);
           learned_posesArray.poses.push_back(regress_pose);
-          // ros::Duration(0.001).sleep();
+          // ros::Duration(0.1).sleep();
           i++;
         }        
       }
@@ -478,6 +480,64 @@ class GMMNode
     }
   }
 
+  // void trajRegressionCallback()
+  // {
+  //   geometry_msgs::Pose regressed_pose, end_pose; 
+  //   data_handle::DemonsInfo srv;
+  //   srv.request.send = false;
+  //   if (demonsInfo_client.call(srv))
+  //   {
+  //     rosbag::Bag rbag;
+  //     // Regress over the poseError samples of the longest Demon
+  //     rbag.open(demonsDir + task_param + "/" + subtask_param + "/Franka_Stage2_" + task_param + "_" + subtask_param + "_" + srv.response.names[srv.response.longest_idx] + ".bag");
+      
+  //     int i = 0;
+  //     for(rosbag::MessageInstance const m: rosbag::View(rbag))
+  //     {
+  //       franka_msgs::FrankaState::ConstPtr mp = m.instantiate<franka_msgs::FrankaState>();   
+  //       // Set the starting pose for regression to be the first pose of the longest Demon
+  //       if (i == 0)
+  //       {
+  //         regressed_pose.position.x = mp->O_T_EE[12];
+  //         regressed_pose.position.y = mp->O_T_EE[13];
+  //         regressed_pose.position.z = mp->O_T_EE[14];
+  //       }
+  //       // Set the ending pose for regression to be the last pose of the longest Demon
+  //       else if (i == srv.response.numofposes[srv.response.longest_idx]-1) // -1
+  //       {
+  //         end_pose.position.x = mp->O_T_EE[12];
+  //         end_pose.position.y = mp->O_T_EE[13];
+  //         end_pose.position.z = mp->O_T_EE[14];
+  //       }
+  //       i++;
+  //     }
+  //     std::cout << "regressed_pose.position.z  = " << regressed_pose.position.z  << std::endl;
+  //     std::cout << "end_pose.position.z  = " << end_pose.position.z  << std::endl;
+
+  //     pose_regress = 1000; // initialize with large number
+  //     while (pose_regress > 0.08)
+  //     {
+  //       geometry_msgs::Pose error_pose = subtPoses(end_pose, regressed_pose);
+  //       pose_regress = sqrt(pow(error_pose.position.x,2) + pow(error_pose.position.y,2) + pow(error_pose.position.z,2)); // euclidean distance of the delta position;
+  //       std::cout << "pose_regress = " << pose_regress << std::endl;
+  //       {          
+  //         std::cout << "*** DOING Regression ***" << std::endl;
+  //         doRegression(eigendata,  means, weights , covariances);
+
+  //         //Publish the learned_trajectory on topic /gmm/learned_trajectory to move robot
+  //         regressed_pose = addPoses(learned_pose.pose, regressed_pose);
+  //         learned_posesArray.poses.push_back(regressed_pose);
+  //         // ros::Duration(0.1).sleep();
+  //       }        
+  //     }
+  //     ROS_INFO_STREAM("Number of Regression Samples: " << i);
+  //     learned_posesArray.header.frame_id = "panda_link0";
+  //     learned_posesArray_pub.publish(learned_posesArray);
+  //     ROS_INFO("$$$$$$$$$$$$$$$ GMM-GMR Learned Trajectory is Published!");
+  //     rbag.close();
+  //   }
+  // }
+
 
   void saveLearnedTraj(const geometry_msgs::PoseArrayConstPtr& msg)
   {
@@ -487,7 +547,7 @@ class GMMNode
     {
       std::cout << "Saving ... !" << std::endl;
       rosbag::Bag wbag;
-      wbag.open(llDir + task_param + "/gmm-gmr/gmr_learned_" + subtask_param + "testt.bag", rosbag::bagmode::Write);
+      wbag.open(llDir + task_param + "/gmm-gmr/gmr_learned_" + subtask_param + "test.bag", rosbag::bagmode::Write);
       
       wbag.write("/gmm/learned_trajectory", ros::Time::now(), msg);
       wbag.close();
@@ -502,6 +562,14 @@ class GMMNode
     p.position.x = p1.position.x + p2.position.x;
     p.position.y = p1.position.y + p2.position.y;
     p.position.z = p1.position.z + p2.position.z;
+    return p;
+  }
+  geometry_msgs::Pose subtPoses(geometry_msgs::Pose p1, geometry_msgs::Pose p2)
+  {
+    geometry_msgs::Pose p;
+    p.position.x = p1.position.x - p2.position.x;
+    p.position.y = p1.position.y - p2.position.y;
+    p.position.z = p1.position.z - p2.position.z;
     return p;
   }
 
