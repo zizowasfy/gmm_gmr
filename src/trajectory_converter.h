@@ -46,6 +46,6 @@
 // dy: y diff
 // dz: z diff
 #define PARAM_NAME_OUTPUT_FIELDS        "output_fields"
-#define PARAM_DEFAULT_OUTPUT_FIELDS     "index x y z"
+#define PARAM_DEFAULT_OUTPUT_FIELDS     "index x y z ox oy oz ow"
 
 #endif // TRAJECTORY_CONVERTER_H

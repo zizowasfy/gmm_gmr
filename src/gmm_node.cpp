@@ -374,8 +374,15 @@ class GMMNode
       out_xi(0,coord)=beta_k_xi_hat_s_k_sum/beta_k_sum;
     }
     
-    learned_pose.pose.position.x = out_xi(0,1); learned_pose.pose.position.y = out_xi(0,2); learned_pose.pose.position.z = out_xi(0,3);
-
+    learned_pose.pose.position.x = out_xi(0,1);
+    learned_pose.pose.position.y = out_xi(0,2);
+    learned_pose.pose.position.z = out_xi(0,3);
+    learned_pose.pose.orientation.x = out_xi(0,4);
+    learned_pose.pose.orientation.y = out_xi(0,5);
+    learned_pose.pose.orientation.z = out_xi(0,6);
+    learned_pose.pose.orientation.w = out_xi(0,7);
+    
+    std::cout<< "learned_pose.pose.orientation.z ===" << learned_pose.pose.orientation.z <<std::endl;
 
     // // Publish the learned_trajectory on topic /gmm_node/gmm/learned_trajectory
     // learned_pose.header.frame_id = "panda_link0";
@@ -443,13 +450,13 @@ class GMMNode
     {
       rosbag::Bag rbag;
       // Regress over the poseError samples of the longest Demon
-      rbag.open(demonsDir + task_param + "/" + subtask_param + "/Franka_Stage2_" + task_param + "_" + subtask_param + "_" + srv.response.names[srv.response.shortest_idx] + ".bag");
+      rbag.open(demonsDir + task_param + "/" + subtask_param + "/Franka_Stage2_" + task_param + "_" + subtask_param + "_" + srv.response.names[srv.response.longest_idx] + ".bag");
       int i = 0;
       for(rosbag::MessageInstance const m: rosbag::View(rbag))
       {
         franka_msgs::FrankaState::ConstPtr mp = m.instantiate<franka_msgs::FrankaState>();   
 
-        // pose_regress = mp->O_T_EE_c[15];   // attempt to train over time samples instead of poseError    
+        // pose_regress = mp->O_T_EE_c[0];   // Train over time samples instead of poseError    
         pose_regress = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2)); // euclidean distance of the delta position;
         std::cout << "pose_regress = " << pose_regress << std::endl;
         if (mp != nullptr) // && pose_regress > 0.03)
@@ -460,6 +467,10 @@ class GMMNode
             regress_pose.position.x = mp->O_T_EE[12];
             regress_pose.position.y = mp->O_T_EE[13];
             regress_pose.position.z = mp->O_T_EE[14];
+            regress_pose.orientation.x = mp->O_T_EE_c[3];
+            regress_pose.orientation.y = mp->O_T_EE_c[7];
+            regress_pose.orientation.z = mp->O_T_EE_c[11];
+            regress_pose.orientation.w = mp->O_T_EE_c[15];                                    
           }
           
           std::cout << "*** DOING Regression ***" << std::endl;
@@ -559,9 +570,21 @@ class GMMNode
   geometry_msgs::Pose addPoses(geometry_msgs::Pose p1, geometry_msgs::Pose p2)
   {
     geometry_msgs::Pose p;
+    Eigen::Quaterniond p_quat, p1_quat, p2_quat;
+
+    p1_quat.coeffs() << p1.orientation.x, p1.orientation.y, p1.orientation.z, p1.orientation.w;
+    p2_quat.coeffs() << p2.orientation.x, p2.orientation.y, p2.orientation.z, p2.orientation.w;
+
     p.position.x = p1.position.x + p2.position.x;
     p.position.y = p1.position.y + p2.position.y;
     p.position.z = p1.position.z + p2.position.z;
+    p_quat = p1_quat * p2_quat; // desired = delta * current
+    p.orientation.x = p_quat.x();
+    p.orientation.y = p_quat.y();
+    p.orientation.z = p_quat.z();
+    p.orientation.w = p_quat.w();
+    std::cout << "p1_quat.x() === " << p_quat.x() << std::endl;
+
     return p;
   }
   geometry_msgs::Pose subtPoses(geometry_msgs::Pose p1, geometry_msgs::Pose p2)
