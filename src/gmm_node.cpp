@@ -450,14 +450,14 @@ class GMMNode
     {
       rosbag::Bag rbag;
       // Regress over the poseError samples of the longest Demon
-      rbag.open(demonsDir + task_param + "/" + subtask_param + "/Franka_Stage2_" + task_param + "_" + subtask_param + "_" + srv.response.names[srv.response.longest_idx] + ".bag");
+      rbag.open(demonsDir + task_param + "/" + subtask_param + "/Franka_Stage2_" + task_param + "_" + subtask_param + "_" + srv.response.names[srv.response.shortest_idx] + ".bag");
       int i = 0;
       for(rosbag::MessageInstance const m: rosbag::View(rbag))
       {
         franka_msgs::FrankaState::ConstPtr mp = m.instantiate<franka_msgs::FrankaState>();   
 
-        // pose_regress = mp->O_T_EE_c[0];   // Train over time samples instead of poseError    
-        pose_regress = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2)); // euclidean distance of the delta position;
+        pose_regress = mp->O_T_EE_c[0];   // Train over time samples instead of poseError    
+        // pose_regress = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2)); // euclidean distance of the delta position;
         std::cout << "pose_regress = " << pose_regress << std::endl;
         if (mp != nullptr) // && pose_regress > 0.03)
         {
@@ -472,7 +472,8 @@ class GMMNode
             regress_pose.orientation.z = mp->O_T_EE_c[11];
             regress_pose.orientation.w = mp->O_T_EE_c[15];                                    
           }
-          
+
+          std::cout<< "means.size(): " << means.size() <<std::endl;        
           std::cout << "*** DOING Regression ***" << std::endl;
           doRegression(eigendata,  means, weights , covariances);
 
@@ -583,7 +584,6 @@ class GMMNode
     p.orientation.y = p_quat.y();
     p.orientation.z = p_quat.z();
     p.orientation.w = p_quat.w();
-    std::cout << "p1_quat.x() === " << p_quat.x() << std::endl;
 
     return p;
   }

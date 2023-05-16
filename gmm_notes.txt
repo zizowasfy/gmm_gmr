@@ -85,4 +85,18 @@ Ideas:
   Regress for delta pose over time samples
   - The delta pose for each Demon will be extracted and then used to make new Demons
   - After that, DTW can be used (or not!)
-  - 
+
+After Successfully adding the Orientation:
+  TESTING with Rcover:
+    (longest_idx , poseError)  -> dmp overshoots the orientation a bit
+    (longest_idx , time)       -> goes up at the end of trajectory, but orientation is fine
+    (shortest_idx, time)       -> goood
+    (shortest_idx, poseError)  -> good but dmp undershoots the orientation
+  - Regress over longest_idx demon works better with poseError sampling (for Rcover)
+  - Regress over shortest_idx demon works better with time sampling (for Rcover)
+  TESTING with Rbolts:
+    (longest_idx , poseError)  -> good but dmp comes with a descend at the begining and then a long sweep parallel to the table
+    (longest_idx , time)       -> goes up at the end of trajectory
+    (shortest_idx, time)       -> goood with almost no unwanted sweep near the table (surface)
+    (shortest_idx, poseError)  -> as (longest_idx , poseError) but less aggresive
+ 
