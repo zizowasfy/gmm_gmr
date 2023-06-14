@@ -25,9 +25,16 @@ add_message_files(
     GaussianMixture.msg
   )
 
+## Generate services in the 'srv' folder
+add_service_files(
+  FILES
+  DoRegression.srv
+)
+
 generate_messages(
   DEPENDENCIES
   std_msgs
+  # Eigen3
   )
 
 ###################################

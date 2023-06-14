@@ -1,0 +1,5 @@
+float64[] X
+float64[] means
+float64[] covariances
+---
+float64[] sample

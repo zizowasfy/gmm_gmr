@@ -61,7 +61,9 @@
 #include <boost/filesystem.hpp>
 using namespace boost::filesystem;
 
+// srv
 #include <data_handle/DemonsInfo.h>
+#include <gaussian_mixture_model/DoRegression.h>
 
 class GMMNode
 {
@@ -96,6 +98,8 @@ class GMMNode
     m_mix_publisher = m_nh.advertise<gaussian_mixture_model::GaussianMixture>(temp_string,2);
 
     demonsInfo_client = m_nh.serviceClient<data_handle::DemonsInfo>("/DemonsInfo_Service");
+
+    doRegression_server = m_nh.advertiseService("/DoRegression_Service", &GMMNode::doRegressionServer);
 
     learned_posesArray_pub = m_nh.advertise<geometry_msgs::PoseArray>("/gmm/learned_trajectory",10);
 
@@ -326,7 +330,7 @@ class GMMNode
     float xi_hat_s_k, mu_s_k,mu_t_k,sigma_st_k,inv_sigma_t_k,sigma_hat_s_k,
           sigma_s_k, sigma_t_k,sigma_ts_k, xi_t, beta_k,xi_hat_s,beta_k_sum, beta_k_xi_hat_s_k_sum;
 
-    for(std::size_t coord=1; coord<out_xi.cols(); coord++)    // loop over the xyz coordinates
+    for(std::size_t coord=1; coord<out_xi.cols(); coord++)    // loop over the xyz coordinates (dimenstions of the model)
     {
       beta_k_sum=0;
       beta_k_xi_hat_s_k_sum=0;
@@ -456,8 +460,8 @@ class GMMNode
       {
         franka_msgs::FrankaState::ConstPtr mp = m.instantiate<franka_msgs::FrankaState>();   
 
-        pose_regress = mp->O_T_EE_c[0];   // Train over time samples instead of poseError    
-        // pose_regress = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2)); // euclidean distance of the delta position;
+        // pose_regress = mp->O_T_EE_c[0];   // Train over time samples instead of poseError    
+        pose_regress = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2)); // euclidean distance of the delta position;
         std::cout << "pose_regress = " << pose_regress << std::endl;
         if (mp != nullptr) // && pose_regress > 0.03)
         {
@@ -559,7 +563,7 @@ class GMMNode
     {
       std::cout << "Saving ... !" << std::endl;
       rosbag::Bag wbag;
-      wbag.open(llDir + task_param + "/gmm-gmr/gmr_learned_" + subtask_param + "test.bag", rosbag::bagmode::Write);
+      wbag.open(llDir + task_param + "/gmm-gmr/gmr_learned_" + subtask_param + "_test.bag", rosbag::bagmode::Write);
       
       wbag.write("/gmm/learned_trajectory", ros::Time::now(), msg);
       wbag.close();
@@ -622,6 +626,7 @@ class GMMNode
   std::vector<Eigen::MatrixXf> covariances;
 
   ros::ServiceClient demonsInfo_client;
+  ros::ServiceServer doRegression_server;
   data_handle::DemonsInfo srv;
   ros::Publisher learned_posesArray_pub;
   ros::Subscriber learned_posesArray_sub;
