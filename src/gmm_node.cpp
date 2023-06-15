@@ -99,7 +99,9 @@ class GMMNode
 
     demonsInfo_client = m_nh.serviceClient<data_handle::DemonsInfo>("/DemonsInfo_Service");
 
-    doRegression_server = m_nh.advertiseService("/DoRegression_Service", &GMMNode::doRegressionServer);
+    doRegression_server = m_nh.advertiseService("/DoRegression_Service", &GMMNode::doRegressionServer, this);
+
+    doRegression_client = m_nh.serviceClient<gaussian_mixture_model::DoRegression>("/DoRegression_Service");
 
     learned_posesArray_pub = m_nh.advertise<geometry_msgs::PoseArray>("/gmm/learned_trajectory",10);
 
@@ -296,6 +298,63 @@ class GMMNode
       return  (nominator/denominator);
   }
   
+  bool doRegressionServer(gaussian_mixture_model::DoRegression::Request &req, gaussian_mixture_model::DoRegression::Response &res)
+  {
+    ROS_INFO(" ---> DoRegression Service is Requested ");
+    // int GMM_dim = sizeof(req.GMM.gaussians[0].means)/sizeof(req.GMM.gaussians[0].means[0]);
+    int GMM_dim = sizeof(req.GMM.gaussians)/sizeof(req.GMM.gaussians[0]);
+    ROS_INFO("GMM Dimension: %d", GMM_dim);  // !! It gives 6. Don't know why yet!!
+    ROS_INFO_STREAM("req.GMM.gaussians[0].means: " << sizeof(req.GMM.gaussians[0].means));
+    ROS_INFO_STREAM("req.GMM.gaussians[0].means[0]: " << sizeof(req.GMM.gaussians[0].means[0]));
+
+    if (req.regress == 0.0) // When empty, it means that request came from gmm_node, i.e. use the latest trained GMM whose variables are stored in gmm_node 
+    {
+      ROS_INFO(" Doing Regression with the preloaded parameters ");
+      doRegression(eigendata, means, weights, covariances);
+    }
+    else // means that the request came from outside gmm_node, i.e. the variables (means, weights, covariances) are sent within the req
+    {
+      gaussian_mixture_model::GaussianMixture GMM_msg = req.GMM;
+      // int GMM_dim = sizeof(GMM_msg.gaussians[0].means)/sizeof(GMM_msg.gaussians[0].means[0]);
+      // ROS_INFO("GMM Dimension: %d", GMM_dim);
+
+      // Read GaussianMixutre msg and convert it to a format that doRegression(....) accepts
+      Eigen::MatrixXf GMM_X = Eigen::MatrixXf::Identity(1,GMM_dim); // Not really necessary, it's just only to abide by doRegression(....) format
+      std::vector<Eigen::VectorXf> GMM_means;
+      std::vector<Eigen::MatrixXf> GMM_covariances;
+      std::vector<float> GMM_weights = GMM_msg.weights;
+      for (gaussian_mixture_model::Gaussian gaussian : GMM_msg.gaussians)
+      {
+        Eigen::VectorXf G_means;
+        Eigen::MatrixXf G_covariances(GMM_dim, GMM_dim);
+        int i = 0;
+        for (int d = 0; d < GMM_dim; d++)
+        {
+          G_means << gaussian.means[d];
+
+          for (int c = 0; c < GMM_dim; c++)
+          {
+            G_covariances << gaussian.covariances[c+i];
+          }
+          i =+ GMM_dim; // To make sure that each row from gaussian.coavariances is placed correctly in G_covariances
+        }
+
+
+        GMM_means.push_back(G_means);
+        GMM_covariances.push_back(G_covariances);
+      }
+      doRegression(GMM_X, GMM_means, GMM_weights, GMM_covariances);
+      GMM_means.clear();
+      GMM_covariances.clear();    
+
+      res.sample = {learned_pose.pose.position.x, learned_pose.pose.position.y, learned_pose.pose.position.z,
+          learned_pose.pose.orientation.x, learned_pose.pose.orientation.y, learned_pose.pose.orientation.z, learned_pose.pose.orientation.w};
+    }
+
+    ROS_INFO_STREAM("Service Response: " << learned_pose);
+    return true;
+  }
+
   void doRegression(Eigen::MatrixXf  xi, const std::vector<Eigen::VectorXf>  means, const std::vector<float>  weights , const std::vector<Eigen::MatrixXf>  covariances)
   {
     std::cout << "    *** Starting Regression ***    " << std::endl;
@@ -403,6 +462,7 @@ class GMMNode
 
   }
 
+  // Regress over the poseError of the robot's current pose
   void poseRegressionCallback(const geometry_msgs::PoseStampedConstPtr& msg)
   {
     if (data_recevied && !goal_reached)
@@ -445,6 +505,7 @@ class GMMNode
     }
   }
 
+  // Regress over the poseError samples of the longest Demon
   void trajRegressionCallback()
   {
     geometry_msgs::Pose regress_pose; 
@@ -479,10 +540,19 @@ class GMMNode
 
           std::cout<< "means.size(): " << means.size() <<std::endl;        
           std::cout << "*** DOING Regression ***" << std::endl;
-          doRegression(eigendata,  means, weights , covariances);
-
+          // doRegression(eigendata,  means, weights , covariances);
+          gaussian_mixture_model::DoRegression DoReg_srv;
+          if (doRegression_client.call(DoReg_srv))
+          {
+            ROS_INFO(" Client SUCCESSFULLY Requested DoRegression Service with the preloaded parameters ");
+          }
+          else
+          {
+            ROS_ERROR(" Client FAILED to call DoRegression Service");
+          }
           //Publish the learned_trajectory on topic /gmm/learned_trajectory to move robot
-          regress_pose = addPoses(learned_pose.pose, regress_pose);
+          regress_pose = learned_pose.pose; // Use when learning absolute poses          
+          // regress_pose = addPoses(learned_pose.pose, regress_pose); // Use when learning delta poses
           learned_posesArray.poses.push_back(regress_pose);
           // ros::Duration(0.1).sleep();
           i++;
@@ -627,6 +697,7 @@ class GMMNode
 
   ros::ServiceClient demonsInfo_client;
   ros::ServiceServer doRegression_server;
+  ros::ServiceClient doRegression_client;
   data_handle::DemonsInfo srv;
   ros::Publisher learned_posesArray_pub;
   ros::Subscriber learned_posesArray_sub;
