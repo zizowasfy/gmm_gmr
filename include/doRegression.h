@@ -4,6 +4,8 @@
 
 // ROS
 #include <ros/ros.h>
+#include <rosbag/bag.h>
+#include <rosbag/view.h>
 #include <std_msgs/Float32MultiArray.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -16,12 +18,65 @@
 // Eigen
 #include <Eigen/Dense>
 
-//
+// gmm
+#include <gaussian_mixture_model/Gaussian.h>
+#include <gaussian_mixture_model/GaussianMixture.h>
+
+// system
 #include <iostream>
 #include <fstream>
 #include <boost/filesystem.hpp>
 using namespace boost::filesystem;
 
+void getGMMfromBag(Eigen::MatrixXf &GMM_X, std::vector<Eigen::VectorXf> &GMM_means, std::vector<float> &GMM_weights, std::vector<Eigen::MatrixXf> &GMM_covariances)
+{
+  // Getting the GMM from the .bag file
+  rosbag::Bag rbag;
+  rbag.open("/home/zizo/Disassembly Teleop/LL/Rcover/gmm-gmr/gmm_mix_action2.bag");
+
+  // // Initializing Variables
+  // Eigen::MatrixXf GMM_X;
+  // std::vector<Eigen::VectorXf> GMM_means;
+  // std::vector<Eigen::MatrixXf> GMM_covariances;
+  // std::vector<float> GMM_weights;
+
+  for(rosbag::MessageInstance const m: rosbag::View(rbag))
+  {
+    gaussian_mixture_model::GaussianMixture::ConstPtr i = m.instantiate<gaussian_mixture_model::GaussianMixture>();
+    if (i != nullptr)
+    {
+      int GMM_dim = sizeof(i->gaussians[0].means)/3; // 3 cause it seems the size of float32 is 3 bytes instead of 4 bytes!!
+      ROS_INFO("GMM Dimension: %d", GMM_dim);
+
+      // Read GaussianMixutre msg and convert it to a format that doRegression(....) accepts
+      GMM_X = Eigen::MatrixXf::Identity(1,GMM_dim); // Not really necessary, it's just only to abide by doRegression(....) format
+      GMM_means.clear();
+      GMM_covariances.clear();
+      Eigen::VectorXf G_means(GMM_dim);
+      Eigen::MatrixXf G_covariances(GMM_dim, GMM_dim);      
+      GMM_weights = i->weights;
+      for (gaussian_mixture_model::Gaussian gaussian : i->gaussians)
+      {
+        // Eigen::VectorXf G_means(GMM_dim);
+        // Eigen::MatrixXf G_covariances(GMM_dim, GMM_dim);
+        int i = 0;
+        for (int d = 0; d < GMM_dim; d++)
+        {
+          G_means(d) = gaussian.means[d];
+
+          for (int c = 0; c < GMM_dim; c++)
+          {
+            G_covariances(d,c) = gaussian.covariances[i]; //[c+i]
+          }
+          i++; //=+ GMM_dim; // To make sure that each row from gaussian.coavariances is placed correctly in G_covariances
+        }
+        GMM_means.push_back(G_means);
+        GMM_covariances.push_back(G_covariances);
+      }
+    }
+  }
+  rbag.close();
+}
 
 // this function compute PDF of X which has lenght of k
 float computeNormalDistributionPDF(Eigen::VectorXf X, Eigen::VectorXf mean, Eigen::MatrixXf covariance)
@@ -99,7 +154,7 @@ std::vector<float> doRegression(float input, Eigen::MatrixXf  xi, const std::vec
 
 
 
-        beta_k=weights.at(k) * computeNormalDistributionPDF(X, mean,covariance);
+        beta_k=weights.at(k) * computeNormalDistributionPDF(X, mean, covariance);
         beta_k_sum=beta_k_sum+beta_k;
 
         xi_hat_s=beta_k*xi_hat_s_k;
