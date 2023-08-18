@@ -103,7 +103,9 @@ class GMMNode
 
     learned_pose_pub = m_nh.advertise<geometry_msgs::PoseStamped>("/gmm/learned_pose", 1);
 
-    pose_regression_sub = m_nh.subscribe("/robot_ee_cartesianpose", 1, &GMMNode::poseRegressionCallback, this);
+    // pose_regression_sub = m_nh.subscribe("/robot_ee_cartesianpose", 1, &GMMNode::poseRegressionCallback, this);
+
+    tpgmm_sub = m_nh.subscribe("/gmm/mix", 1, &GMMNode::onTPGMM, this);
 
     m_nh.getParam("/task_param", task_param);
     m_nh.getParam("/subtask_param", subtask_param);
@@ -256,6 +258,40 @@ class GMMNode
     }
   }
 
+  // Receiving TPGMM from tp_gmm node and put it in the format for doRegression()
+  void onTPGMM(gaussian_mixture_model::GaussianMixturePtr data)
+  {
+    int gmm_num = data->weights.size();
+    int g_dim;
+    std::vector<float> tpgmm_weights = data->weights;
+    std::vector<Eigen::VectorXf> tpgmm_means;
+    std::vector<Eigen::MatrixXf> tpgmm_covariances;
+
+    for (int n = 0; n < gmm_num; n++)
+    {
+      g_dim = data->gaussians[n].means.size();
+      Eigen::VectorXf g_means(g_dim);
+      Eigen::MatrixXf g_covariances(g_dim, g_dim);
+
+      std::cout << "g_means.size() = " << g_means.size() << std::endl;
+      int i = 0;
+      for (int m = 0; m < g_dim; m++)
+      {
+        g_means(m) = data->gaussians[n].means[m];
+        for(int c = 0; c < g_dim; c++)
+        {
+          g_covariances(m,c) = data->gaussians[n].covariances[i];
+          i++;
+        }
+      }
+      tpgmm_means.push_back(g_means);
+      tpgmm_covariances.push_back(g_covariances);
+    }
+    
+    Eigen::MatrixXf Xi(int(data->bic), g_dim);
+    doRegression(Xi, tpgmm_means, tpgmm_weights, tpgmm_covariances);
+  }
+
   void onData(std_msgs::Float32MultiArrayConstPtr data)
   {
     boost::mutex::scoped_lock lock(m_queue_mutex);
@@ -296,11 +332,14 @@ class GMMNode
   {
     std::cout << "    *** Starting Regression ***    " << std::endl;
     
-    int numTrajsamples = 1;     // number of points in the chosen trajectory
-    int i = 0;
-    std::string trajDir;
+    // int numTrajsamples = 1;     // number of points in the chosen trajectory
+    // int i = 0;
+    // std::string trajDir;
 
-    rosbag::Bag rbag, wbag;
+    // rosbag::Bag rbag, wbag;
+
+    geometry_msgs::PoseArray learned_posesArray;
+    geometry_msgs::Pose pose;
 
     Eigen::VectorXf X;
     Eigen::VectorXf mean;
@@ -311,8 +350,8 @@ class GMMNode
     // out_xi.resize(xi.rows() ,xi.cols());
     // out_xi=Eigen::MatrixXf::Zero(xi.rows(), xi.cols());
     // numTrajsamples = 703;
-    out_xi.resize(numTrajsamples, xi.cols());
-    out_xi=Eigen::MatrixXf::Zero(numTrajsamples, xi.cols());
+    out_xi.resize(xi.rows(), xi.cols());
+    out_xi=Eigen::MatrixXf::Zero(xi.rows(), xi.cols());
 
     // std::cout << "numTrajsamples:" << numTrajsamples << std::endl;
     // std::cout<< "xi:" <<std::endl << xi.size()/4 <<std::endl;
@@ -320,69 +359,68 @@ class GMMNode
     // std::cout<< "covariances: " << covariances.size() <<std::endl;
     // std::cout<< "weights: " << weights.size() <<std::endl;
 
-
-
   //equation 10
     float xi_hat_s_k, mu_s_k,mu_t_k,sigma_st_k,inv_sigma_t_k,sigma_hat_s_k,
           sigma_s_k, sigma_t_k,sigma_ts_k, xi_t, beta_k,xi_hat_s,beta_k_sum, beta_k_xi_hat_s_k_sum;
 
-    for(std::size_t coord=1; coord<out_xi.cols(); coord++)    // loop over the xyz coordinates
+    for(std::size_t i = 0; i < out_xi.rows(); i++)   // loop over data points
     {
-      beta_k_sum=0;
-      beta_k_xi_hat_s_k_sum=0;
-      for(std::size_t k=0; k<means.size(); k++)     // loop over the number of gaussians
+      for(std::size_t coord=1; coord<out_xi.cols(); coord++)    // loop over the xyz coordinates
       {
-        mu_t_k=means.at(k)(0);
-        mu_s_k=means.at(k)(coord);
-        sigma_st_k=covariances.at(k)(coord,0);
-        sigma_t_k=covariances.at(k)(0,0);
-        inv_sigma_t_k=1/sigma_t_k;
-        sigma_s_k=covariances.at(k)(coord,coord);
-        sigma_ts_k=covariances.at(k)(0,coord);
-        // xi_t=xi(i,0);
-        // xi_t = i;
-        // xi_t = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2));
-        xi_t = pose_regress;
-        // xi_t = xi(i,3);
-        xi_hat_s_k=mu_s_k+ sigma_st_k*inv_sigma_t_k*(xi_t -mu_t_k);
-        sigma_hat_s_k=sigma_s_k -sigma_st_k*inv_sigma_t_k*sigma_ts_k;
+        beta_k_sum=0;
+        beta_k_xi_hat_s_k_sum=0;
+        for(std::size_t k=0; k<means.size(); k++)     // loop over the number of gaussians
+        {
+          mu_t_k=means.at(k)(0);
+          mu_s_k=means.at(k)(coord);
+          sigma_st_k=covariances.at(k)(coord,0);
+          sigma_t_k=covariances.at(k)(0,0);
+          inv_sigma_t_k=1/sigma_t_k;
+          sigma_s_k=covariances.at(k)(coord,coord);
+          sigma_ts_k=covariances.at(k)(0,coord);
+          // xi_t=xi(i,0);
+          xi_t = i;
+          // xi_t = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2));
+          // xi_t = pose_regress;
+          // xi_t = xi(i,3);
+          xi_hat_s_k=mu_s_k+ sigma_st_k*inv_sigma_t_k*(xi_t -mu_t_k);
+          sigma_hat_s_k=sigma_s_k -sigma_st_k*inv_sigma_t_k*sigma_ts_k;
 
 
-        //equation 11
+          //equation 11
 
-        X.resize(1,1);
-        mean.resize(1,1);
-        covariance.resize(1,1);
-
-
-
-        X<<xi_t;
-        mean<<mu_t_k;
-
-        covariance<<sigma_t_k;
+          X.resize(1,1);
+          mean.resize(1,1);
+          covariance.resize(1,1);
 
 
 
+          X<<xi_t;
+          mean<<mu_t_k;
 
-        beta_k=weights.at(k) * computeNormalDistributionPDF(X, mean,covariance);
-        beta_k_sum=beta_k_sum+beta_k;
+          covariance<<sigma_t_k;
 
-        xi_hat_s=beta_k*xi_hat_s_k;
-        beta_k_xi_hat_s_k_sum=beta_k_xi_hat_s_k_sum+xi_hat_s;
+
+
+
+          beta_k=weights.at(k) * computeNormalDistributionPDF(X, mean,covariance);
+          beta_k_sum=beta_k_sum+beta_k;
+
+          xi_hat_s=beta_k*xi_hat_s_k;
+          beta_k_xi_hat_s_k_sum=beta_k_xi_hat_s_k_sum+xi_hat_s;
+        }
+        out_xi(i,0)=xi_t;
+        out_xi(i,coord)=beta_k_xi_hat_s_k_sum/beta_k_sum;
       }
-      out_xi(0,0)=xi_t;
-      out_xi(0,coord)=beta_k_xi_hat_s_k_sum/beta_k_sum;
+
+      pose.position.x = out_xi(i,1);
+      pose.position.y = out_xi(i,2);
+      pose.position.z = out_xi(i,3);
+      learned_posesArray.poses.push_back(pose);
     }
-    
-    learned_pose.pose.position.x = out_xi(0,1);
-    learned_pose.pose.position.y = out_xi(0,2);
-    learned_pose.pose.position.z = out_xi(0,3);
-    learned_pose.pose.orientation.x = out_xi(0,4);
-    learned_pose.pose.orientation.y = out_xi(0,5);
-    learned_pose.pose.orientation.z = out_xi(0,6);
-    learned_pose.pose.orientation.w = out_xi(0,7);
-    
-    std::cout<< "learned_pose.pose.orientation.z ===" << learned_pose.pose.orientation.z <<std::endl;
+
+    learned_posesArray.header.frame_id = "panda_link0";
+    learned_posesArray_pub.publish(learned_posesArray);
 
     // // Publish the learned_trajectory on topic /gmm_node/gmm/learned_trajectory
     // learned_pose.header.frame_id = "panda_link0";
@@ -393,10 +431,8 @@ class GMMNode
 
     std::cout<< "out_xi:" <<std::endl <<out_xi <<std::endl;
 
-
     std::cout<< "out_xi.rows():"  <<out_xi.rows() <<std::endl;
     std::cout<< "out_xi.cols():"  <<out_xi.cols() <<std::endl;
-
   }
 
   void poseRegressionCallback(const geometry_msgs::PoseStampedConstPtr& msg)
@@ -565,7 +601,8 @@ class GMMNode
       wbag.close();
       std::cout << "... Saved !" << std::endl;
     }
-
+    else 
+    {std::cout << "... Not Saved !" << std::endl;}
   }
 
   geometry_msgs::Pose addPoses(geometry_msgs::Pose p1, geometry_msgs::Pose p2)
@@ -627,6 +664,7 @@ class GMMNode
   ros::Subscriber learned_posesArray_sub;
   ros::Publisher learned_pose_pub;
   ros::Subscriber pose_regression_sub;    // Receives the current pose of the robot to regress over each pose
+  ros::Subscriber tpgmm_sub;
   float pose_regress;
   geometry_msgs::PoseStamped learned_pose;
   geometry_msgs::PoseArray learned_posesArray;
