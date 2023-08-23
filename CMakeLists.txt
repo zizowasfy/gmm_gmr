@@ -57,6 +57,7 @@ include_directories(
 
 add_library(gaussian_mixture_model
   src/gmm.cpp
+  src/gmm_node.cpp
   )
 
 add_executable(gaussian_mixture_model_node src/gmm_node.cpp)
