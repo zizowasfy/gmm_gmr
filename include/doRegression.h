@@ -28,11 +28,30 @@
 #include <boost/filesystem.hpp>
 using namespace boost::filesystem;
 
+#define LL_DIR "/home/zizo/Disassembly Teleop/LL/"
+std::string l_gmm_dir;
+std::string* l_gmm_dir_ptr = &l_gmm_dir;
+
+void getDirfromTxt()
+{
+  std::string line;
+  ifstream File(std::string(LL_DIR) + "learned_gmm_dir.txt");
+  while (getline (File, line))
+  {
+    std::cout << line << std::endl;
+  }
+  *l_gmm_dir_ptr = line;
+}
+
 void getGMMfromBag(Eigen::MatrixXf &GMM_X, std::vector<Eigen::VectorXf> &GMM_means, std::vector<float> &GMM_weights, std::vector<Eigen::MatrixXf> &GMM_covariances)
 {
+  getDirfromTxt();
+  
   // Getting the GMM from the .bag file
   rosbag::Bag rbag;
-  rbag.open("/home/zizo/Disassembly Teleop/LL/Rcover/gmm-gmr/gmm_mix_action2.bag");
+  // rbag.open("/home/zizo/Disassembly Teleop/LL/Rcover/gmm-gmr/gmm_mix_action2.bag");
+  // rbag.open("/home/zizo/Disassembly Teleop/LL/Rbolts/gmm-gmr/learned_gmm_action_test.bag");
+  rbag.open(l_gmm_dir + "_learned_gmm_mix" + ".bag");
 
   // // Initializing Variables
   // Eigen::MatrixXf GMM_X;
@@ -78,7 +97,8 @@ void getGMMfromBag(Eigen::MatrixXf &GMM_X, std::vector<Eigen::VectorXf> &GMM_mea
   rbag.close();
 
   rosbag::Bag wbag;
-  wbag.open("/home/zizo/Disassembly Teleop/LL/Rcover/gmm-gmr/GMMsamples.bag", rosbag::bagmode::Write);
+  // wbag.open("/home/zizo/Disassembly Teleop/LL/Rcover/gmm-gmr/GMMsamples.bag", rosbag::bagmode::Write);
+  wbag.open(l_gmm_dir + "_learned_gmm_samples" + ".bag", rosbag::bagmode::Write);
   wbag.close();
 }
 
@@ -86,7 +106,8 @@ void getGMMfromBag(Eigen::MatrixXf &GMM_X, std::vector<Eigen::VectorXf> &GMM_mea
 void saveSamples(std::vector<double> & sample_pnt)
 {
   rosbag::Bag wbag;
-  wbag.open("/home/zizo/Disassembly Teleop/LL/Rcover/gmm-gmr/GMMsamples.bag", rosbag::bagmode::Append);
+  // wbag.open("/home/zizo/Disassembly Teleop/LL/Rcover/gmm-gmr/GMMsamples.bag", rosbag::bagmode::Append);
+  wbag.open(l_gmm_dir + "_learned_gmm_samples" + ".bag", rosbag::bagmode::Append);
 
   geometry_msgs::PoseStamped sample;
   sample.header.frame_id = "panda_link0";
