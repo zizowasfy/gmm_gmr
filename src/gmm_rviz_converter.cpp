@@ -147,7 +147,7 @@ class GMMRvizConverter
       marker.scale.y = mix.weights[i] * scale.y() * m_scale;
       marker.scale.z = mix.weights[i] * scale.z() * m_scale;
 
-      marker.color.a = 1.0;
+      marker.color.a = 0.5; // 0.0 = fully transparent , 1.0 = fully visible
       rainbow(float(i) / float(mix.gaussians.size()),marker.color.r,marker.color.g,marker.color.b);
 
       msg.markers.push_back(marker);
