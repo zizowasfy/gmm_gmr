@@ -39,7 +39,7 @@
 #include <visualization_msgs/MarkerArray.h>
 
 // Eigen
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
 
 // STL
 #include <sstream>

@@ -32,7 +32,7 @@
 #define GMM_H
 
 // Eigen
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
 
 // boost
 #include <boost/shared_ptr.hpp>

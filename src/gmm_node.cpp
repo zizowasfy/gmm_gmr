@@ -53,7 +53,7 @@
 #include <deque>
 
 // Eigen
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
 
 //
 #include <iostream>
@@ -456,8 +456,8 @@ class GMMNode
       {
         franka_msgs::FrankaState::ConstPtr mp = m.instantiate<franka_msgs::FrankaState>();   
 
-        pose_regress = mp->O_T_EE_c[0];   // Train over time samples instead of poseError    
-        // pose_regress = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2)); // euclidean distance of the delta position;
+        // pose_regress = mp->O_T_EE_c[0];   // Train over time samples instead of poseError    
+        pose_regress = sqrt(pow(mp->O_T_EE_c[12],2) + pow(mp->O_T_EE_c[13],2) + pow(mp->O_T_EE_c[14],2)); // euclidean distance of the delta position;
         std::cout << "pose_regress = " << pose_regress << std::endl;
         if (mp != nullptr) // && pose_regress > 0.03)
         {
