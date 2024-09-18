@@ -38,7 +38,7 @@
 #define PARAM_DEFAULT_OUTPUT_TOPIC "/gmm_rviz_converter_output"
 
 #define PARAM_NAME_FRAME_ID        "frame_id"
-#define PARAM_DEFAULT_FRAME_ID     "panda_link0" //"/root"
+#define PARAM_DEFAULT_FRAME_ID     "base_link" //"/root"
 
 #define PARAM_NAME_SCALE           "scale"
 #define PARAM_DEFAULT_SCALE        (double(10.0))
