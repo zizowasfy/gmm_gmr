@@ -37,7 +37,7 @@
 
 // search will terminate when the gaussian count reaches this OR...
 #define PARAM_NAME_GAUSSIAN_COUNT_MAX    "gaussian_count_max"
-#define PARAM_DEFAULT_GAUSSIAN_COUNT_MAX 1
+#define PARAM_DEFAULT_GAUSSIAN_COUNT_MAX 10
 // ...when the current BIC - lower BIC is higher than this
 #define PARAM_NAME_BIC_TERM_THRESHOLD    "bic_termination_threshold"
 #define PARAM_DEFAULT_BIC_TERM_THRESHOLD (double(1000000.0))

@@ -260,7 +260,7 @@ class GMMNode
       m_mix_publisher.publish(mix_msg);
       ROS_INFO("gmm: message sent.");
       // data_recevied = true;
-      trajRegressionCallback();
+      // trajRegressionCallback();
     }
   }
 

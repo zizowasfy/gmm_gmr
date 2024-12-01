@@ -118,38 +118,32 @@ class FormatString
     return m_is_valid;
   }
 
-  std::vector<float> format(const data_handle::DemonsArray & demons,uint index) const
+  std::vector<float> format(const geometry_msgs::PoseArray & poses,uint index) const
   {
     std::vector<float> result;
     result.reserve(m_pars.size());
-    // std::cout << "result.size() " << result.size() << std::endl;
 
-    uint ip = index < (demons.posearray.poses.size() - 1) ? index + 1 : index;
+    uint ip = index < (poses.poses.size() - 1) ? index + 1 : index;
     uint im = index > 0 ? index - 1 : index;
 
     for (uint i = 0; i < m_pars.size(); i++)
     {
       if (m_pars[i] == FORMAT_INDEX)
-        // result.push_back(float(index));
-        result.push_back(demons.sample[index]);
+        result.push_back(float(index));
       else if (m_pars[i] == FORMAT_X)
-        result.push_back(demons.posearray.poses[index].position.x);
+        result.push_back(poses.poses[index].position.x);
       else if (m_pars[i] == FORMAT_Y)
-        result.push_back(demons.posearray.poses[index].position.y);
+        result.push_back(poses.poses[index].position.y);
       else if (m_pars[i] == FORMAT_Z)
-        result.push_back(demons.posearray.poses[index].position.z);
-      else if (m_pars[i] == FORMAT_OX)
-        result.push_back(demons.posearray.poses[index].orientation.x);
-      else if (m_pars[i] == FORMAT_OY)
-        result.push_back(demons.posearray.poses[index].orientation.y);
-      else if (m_pars[i] == FORMAT_OZ)
-        result.push_back(demons.posearray.poses[index].orientation.z);
-      else if (m_pars[i] == FORMAT_OW)
-        result.push_back(demons.posearray.poses[index].orientation.w);        
+        result.push_back(poses.poses[index].position.z);
+      else if (m_pars[i] == FORMAT_DX)
+        result.push_back(poses.poses[ip].position.x - poses.poses[im].position.x);
+      else if (m_pars[i] == FORMAT_DY)
+        result.push_back(poses.poses[ip].position.y - poses.poses[im].position.y);
+      else if (m_pars[i] == FORMAT_DZ)
+        result.push_back(poses.poses[ip].position.z - poses.poses[im].position.z);
     }
 
-    // std::cout << "result: " << result[0] << " " << result[1] << " " << result[2] << " " << result[3] << " " << std::endl;
-    // ros::Duration(0.1).sleep();
     return result;
   }
 
@@ -182,7 +176,7 @@ class TrajectoryConverter
     }
   }
 
-  void onNewInput(const data_handle::DemonsArray & demons)
+  void onNewInput(const geometry_msgs::PoseArray & poses)
   {
     std_msgs::Float32MultiArrayPtr out(new std_msgs::Float32MultiArray);
 
@@ -190,12 +184,12 @@ class TrajectoryConverter
 
     out->layout.dim.resize(2);
     out->layout.dim[1].size = ndim;
-    out->layout.dim[0].size = demons.posearray.poses.size();
+    out->layout.dim[0].size = poses.poses.size();
 
-    out->data.resize(demons.posearray.poses.size() * ndim);
-    for (uint i = 0; i < demons.posearray.poses.size(); i++)
+    out->data.resize(poses.poses.size() * ndim);
+    for (uint i = 0; i < poses.poses.size(); i++)
     {
-      std::vector<float> pars = m_format_string->format(demons,i);
+      std::vector<float> pars = m_format_string->format(poses,i);
       for (uint h = 0; h < ndim; h++)
       {
         out->data[i * ndim + h] = pars[h];
